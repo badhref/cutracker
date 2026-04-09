@@ -459,7 +459,9 @@ async function openDetail(id) {
       </div>
       <div class="detail-field">
         <div class="detail-label">Source</div>
-        <div class="detail-value">${esc(b.source)}</div>
+        <div class="detail-value">${b.source_url
+          ? `<a href="${esc(b.source_url)}" target="_blank" rel="noopener">${esc(b.source)}</a>`
+          : esc(b.source)}</div>
       </div>
       <div class="detail-field full">
         <div class="detail-label">Data Types Compromised</div>
