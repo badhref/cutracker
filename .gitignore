@@ -1,0 +1,6 @@
+node_modules/
+breaches.db
+breaches.db-wal
+breaches.db-shm
+.env
+.claude/

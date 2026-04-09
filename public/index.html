@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Credit Union Breach Tracker</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ── Header ─────────────────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="app-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01"/>
+      </svg>
+      Credit Union Breach Tracker
+      <span class="logo-badge">Financial Cyber Intel</span>
+    </div>
+    <div class="header-spacer"></div>
+    <div class="header-actions">
+      <span class="last-updated" id="last-updated">Loading...</span>
+      <button class="btn btn-secondary btn-sm" id="btn-fetch-all">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        Refresh All
+      </button>
+      <button class="btn btn-primary btn-sm" id="btn-add">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
+        Add Breach
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Sidebar ────────────────────────────────────────────────── -->
+  <nav class="sidebar">
+    <div class="nav-section">
+      <div class="nav-section-label">Intelligence</div>
+      <button class="nav-item active" data-view="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </button>
+      <button class="nav-item" data-view="breaches">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        All Breaches
+        <span class="nav-badge" id="nav-count">—</span>
+      </button>
+      <button class="nav-item" data-view="analytics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        Analytics
+      </button>
+    </div>
+
+    <hr class="nav-divider">
+
+    <div class="nav-section">
+      <div class="nav-section-label">Sources</div>
+      <button class="nav-item" data-view="sources">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        Source Status
+      </button>
+      <button class="nav-item" data-view="fetch-log">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+        Fetch Log
+      </button>
+    </div>
+
+    <hr class="nav-divider">
+
+    <div class="nav-section">
+      <div class="nav-section-label">Tools</div>
+      <button class="nav-item" onclick="exportCSV()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        Export CSV
+      </button>
+    </div>
+  </nav>
+
+  <!-- ── Main Content ───────────────────────────────────────────── -->
+  <main class="main-content">
+
+    <!-- DASHBOARD ─────────────────────────────────────────────── -->
+    <div class="view active" id="view-dashboard">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Threat Intelligence Dashboard</h1>
+          <p class="page-subtitle">Credit union breach activity across monitored sources</p>
+        </div>
+      </div>
+
+      <div class="stat-grid" id="stat-grid">
+        <div class="stat-card"><div class="stat-label">Total Breaches</div><div class="stat-value accent" id="stat-total">—</div><div class="stat-sub">All tracked incidents</div></div>
+        <div class="stat-card"><div class="stat-label">Records Exposed</div><div class="stat-value danger" id="stat-records">—</div><div class="stat-sub">Total members affected</div></div>
+        <div class="stat-card"><div class="stat-label">Active Incidents</div><div class="stat-value warning" id="stat-active">—</div><div class="stat-sub">Unresolved breaches</div></div>
+        <div class="stat-card"><div class="stat-label">Sources Monitored</div><div class="stat-value success" id="stat-sources">6</div><div class="stat-sub">Active data feeds</div></div>
+      </div>
+
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-title">Breach Type Distribution</div>
+          <div class="chart-wrap"><canvas id="chart-type"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Incidents by Year</div>
+          <div class="chart-wrap"><canvas id="chart-year"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Top States Affected</div>
+          <div class="chart-wrap"><canvas id="chart-state"></canvas></div>
+        </div>
+      </div>
+
+      <div class="chart-card" style="margin-bottom:24px">
+        <div class="chart-title">Source Distribution</div>
+        <div id="source-bars"></div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-header">
+          <span class="table-count">Recent Incidents</span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr>
+              <th>Organization</th>
+              <th>Notified</th>
+              <th>Occurred</th>
+              <th>Type</th>
+              <th>Records</th>
+              <th>Source</th>
+            </tr></thead>
+            <tbody id="recent-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- BREACHES ──────────────────────────────────────────────── -->
+    <div class="view" id="view-breaches">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">All Breach Records</h1>
+          <p class="page-subtitle">Search, filter, and manage tracked incidents</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary" onclick="exportCSV()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 10v6m0 0l-3-3m3 3l3-3"/><path d="M20 7l-8-5-8 5v12l8 5 8-5V7z"/></svg>
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="filter-search" placeholder="Search organizations, data types..." oninput="applyFilters()">
+        </div>
+        <select id="filter-source" onchange="applyFilters()">
+          <option value="">All Sources</option>
+          <option>DataBreaches.net</option>
+          <option>BankInfoSecurity</option>
+          <option>KrebsOnSecurity</option>
+          <option>Dark Reading</option>
+          <option>Maine AG</option>
+          <option>California AG</option>
+          <option>HHS OCR</option>
+          <option>NCUA</option>
+          <option>ITRC</option>
+          <option>Manual Entry</option>
+        </select>
+        <select id="filter-type" onchange="applyFilters()">
+          <option value="">All Types</option>
+          <option>Ransomware</option>
+          <option>Phishing</option>
+          <option>Unauthorized Access/Hacking</option>
+          <option>Malware</option>
+          <option>Insider Threat</option>
+          <option>Third-Party/Vendor</option>
+          <option>Accidental Exposure</option>
+          <option>Theft</option>
+          <option>Social Engineering</option>
+        </select>
+        <select id="filter-state" onchange="applyFilters()">
+          <option value="">All States</option>
+          <option>AL</option><option>AK</option><option>AZ</option><option>AR</option>
+          <option>CA</option><option>CO</option><option>CT</option><option>DE</option>
+          <option>FL</option><option>GA</option><option>HI</option><option>ID</option>
+          <option>IL</option><option>IN</option><option>IA</option><option>KS</option>
+          <option>KY</option><option>LA</option><option>ME</option><option>MD</option>
+          <option>MA</option><option>MI</option><option>MN</option><option>MS</option>
+          <option>MO</option><option>MT</option><option>NE</option><option>NV</option>
+          <option>NH</option><option>NJ</option><option>NM</option><option>NY</option>
+          <option>NC</option><option>ND</option><option>OH</option><option>OK</option>
+          <option>OR</option><option>PA</option><option>RI</option><option>SC</option>
+          <option>SD</option><option>TN</option><option>TX</option><option>UT</option>
+          <option>VT</option><option>VA</option><option>WA</option><option>WV</option>
+          <option>WI</option><option>WY</option>
+        </select>
+        <select id="filter-year" onchange="applyFilters()">
+          <option value="">All Years</option>
+          <option>2026</option><option>2025</option><option>2024</option>
+          <option>2023</option><option>2022</option><option>2021</option>
+          <option>2020</option><option>2019</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear</button>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-header">
+          <span class="table-count" id="breach-count">Loading...</span>
+        </div>
+        <div class="table-scroll">
+          <table id="breach-table">
+            <thead><tr>
+              <th onclick="sortTable('organization')">Organization <span class="sort-icon">↕</span></th>
+              <th onclick="sortTable('state')">State</th>
+              <th onclick="sortTable('breach_date')">Breach Date <span class="sort-icon">↕</span></th>
+              <th onclick="sortTable('breach_type')">Type</th>
+              <th onclick="sortTable('records_affected')">Records <span class="sort-icon">↕</span></th>
+              <th>Data Types</th>
+              <th onclick="sortTable('source')">Source</th>
+              <th>Status</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="breach-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ANALYTICS ─────────────────────────────────────────────── -->
+    <div class="view" id="view-analytics">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Threat Analytics</h1>
+          <p class="page-subtitle">Deep analysis of breach patterns and trends</p>
+        </div>
+      </div>
+
+      <div class="charts-row" style="margin-bottom:24px">
+        <div class="chart-card">
+          <div class="chart-title">Attack Vector Analysis</div>
+          <div class="chart-wrap"><canvas id="chart-vector"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Records Exposed by Year</div>
+          <div class="chart-wrap"><canvas id="chart-records-year"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Breach Type Trend</div>
+          <div class="chart-wrap"><canvas id="chart-type-trend"></canvas></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+        <div class="chart-card">
+          <div class="chart-title">Top Affected States</div>
+          <div id="state-bars"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Breach Type Rankings</div>
+          <div id="type-bars"></div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-title">Exposed Data Types Heatmap</div>
+        <div id="datatype-heatmap" style="display:flex;flex-wrap:wrap;gap:8px;padding-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- SOURCES ───────────────────────────────────────────────── -->
+    <div class="view" id="view-sources">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Data Sources</h1>
+          <p class="page-subtitle">Monitored breach notification feeds and status</p>
+        </div>
+        <button class="btn btn-primary" id="btn-fetch-sources">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Refresh All Sources
+        </button>
+      </div>
+
+      <div class="alert alert-info" style="margin-bottom:20px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></svg>
+        <span>Sources are fetched every 6 hours automatically. Some sources may require institutional access or return limited public data.</span>
+      </div>
+
+      <div class="source-grid" id="source-grid"></div>
+    </div>
+
+    <!-- FETCH LOG ─────────────────────────────────────────────── -->
+    <div class="view" id="view-fetch-log">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Fetch Log</h1>
+          <p class="page-subtitle">History of data source retrieval attempts</p>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-header">
+          <span class="table-count">Last 100 fetch events</span>
+        </div>
+        <div id="fetch-log-list" style="padding:4px 0"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── Detail Modal ──────────────────────────────────────────────── -->
+<div class="modal-backdrop hidden" id="detail-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="detail-title">Breach Detail</h2>
+      <button class="modal-close" onclick="closeModal('detail-modal')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="detail-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="detail-delete">Delete</button>
+      <button class="btn btn-secondary" onclick="closeModal('detail-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add/Edit Modal ─────────────────────────────────────────────── -->
+<div class="modal-backdrop hidden" id="add-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="add-modal-title">Add Breach Record</h2>
+      <button class="modal-close" onclick="closeModal('add-modal')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="breach-form" class="form-grid">
+        <div class="form-group full">
+          <label class="form-label">Organization Name *</label>
+          <input class="form-control" type="text" name="organization" required placeholder="e.g. First Community Federal Credit Union">
+        </div>
+        <div class="form-group">
+          <label class="form-label">State</label>
+          <select class="form-control" name="state">
+            <option value="">— Select —</option>
+            <option>AL</option><option>AK</option><option>AZ</option><option>AR</option>
+            <option>CA</option><option>CO</option><option>CT</option><option>DE</option>
+            <option>FL</option><option>GA</option><option>HI</option><option>ID</option>
+            <option>IL</option><option>IN</option><option>IA</option><option>KS</option>
+            <option>KY</option><option>LA</option><option>ME</option><option>MD</option>
+            <option>MA</option><option>MI</option><option>MN</option><option>MS</option>
+            <option>MO</option><option>MT</option><option>NE</option><option>NV</option>
+            <option>NH</option><option>NJ</option><option>NM</option><option>NY</option>
+            <option>NC</option><option>ND</option><option>OH</option><option>OK</option>
+            <option>OR</option><option>PA</option><option>RI</option><option>SC</option>
+            <option>SD</option><option>TN</option><option>TX</option><option>UT</option>
+            <option>VT</option><option>VA</option><option>WA</option><option>WV</option>
+            <option>WI</option><option>WY</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Breach Date</label>
+          <input class="form-control" type="date" name="breach_date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Discovery Date</label>
+          <input class="form-control" type="date" name="discovery_date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notification Date</label>
+          <input class="form-control" type="date" name="notification_date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Breach Type</label>
+          <select class="form-control" name="breach_type">
+            <option value="">— Select —</option>
+            <option>Ransomware</option>
+            <option>Phishing</option>
+            <option>Unauthorized Access/Hacking</option>
+            <option>Malware</option>
+            <option>Insider Threat</option>
+            <option>Third-Party/Vendor</option>
+            <option>Accidental Exposure</option>
+            <option>Theft</option>
+            <option>Social Engineering</option>
+            <option>SQL Injection</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Attack Vector</label>
+          <select class="form-control" name="attack_vector">
+            <option value="">— Select —</option>
+            <option>Email/Phishing</option>
+            <option>Web Application</option>
+            <option>Remote Access</option>
+            <option>Third-Party</option>
+            <option>Physical</option>
+            <option>Insider</option>
+            <option>Social Engineering</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Records Affected</label>
+          <input class="form-control" type="number" name="records_affected" placeholder="e.g. 50000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-control" name="status">
+            <option value="active">Active</option>
+            <option value="reported">Reported</option>
+            <option value="resolved">Resolved</option>
+            <option value="under investigation">Under Investigation</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label class="form-label">Data Types Compromised</label>
+          <input class="form-control" type="text" name="data_types" placeholder="e.g. SSN, Account Number, Date of Birth">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Source</label>
+          <input class="form-control" type="text" name="source" placeholder="Manual Entry">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Source URL</label>
+          <input class="form-control" type="url" name="source_url" placeholder="https://...">
+        </div>
+        <div class="form-group full">
+          <label class="form-label">Description</label>
+          <textarea class="form-control" name="description" rows="3" placeholder="Brief description of the incident..."></textarea>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('add-modal')">Cancel</button>
+      <button class="btn btn-primary" id="btn-save-breach">Save Breach</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast Container ────────────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
