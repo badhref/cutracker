@@ -119,9 +119,27 @@
         <div id="source-bars"></div>
       </div>
 
+      <div class="chart-card" style="margin-bottom:24px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div class="chart-title" style="margin-bottom:0">Breach Occurrence vs. Notification by Month</div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-secondary btn-sm timeline-btn active" data-months="3">3M</button>
+            <button class="btn btn-secondary btn-sm timeline-btn" data-months="6">6M</button>
+            <button class="btn btn-secondary btn-sm timeline-btn" data-months="9">9M</button>
+            <button class="btn btn-secondary btn-sm timeline-btn" data-months="12">12M</button>
+          </div>
+        </div>
+        <div class="chart-wrap" style="height:240px"><canvas id="chart-timeline"></canvas></div>
+      </div>
+
       <div class="table-wrap">
         <div class="table-header">
           <span class="table-count">Recent Incidents</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span style="font-size:11px;color:var(--text-dim)">Sort by:</span>
+            <button class="btn btn-secondary btn-sm recent-sort-btn active" data-sort="notification_date">Notified</button>
+            <button class="btn btn-secondary btn-sm recent-sort-btn" data-sort="breach_date">Occurred</button>
+          </div>
         </div>
         <div class="table-scroll">
           <table>

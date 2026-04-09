@@ -751,6 +751,14 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
 
+/* ── Active toggle buttons (timeline / recent sort) ─────────────────────────── */
+.timeline-btn.active,
+.recent-sort-btn.active {
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+  border-color: var(--accent);
+}
+
 /* ── Severity Indicator ──────────────────────────────────────────────────────── */
 .severity-dot {
   width: 8px; height: 8px;

@@ -36,6 +36,7 @@ function setupButtons() {
   document.getElementById('btn-save-breach').addEventListener('click', saveBreach);
   const fetchSrc = document.getElementById('btn-fetch-sources');
   if (fetchSrc) fetchSrc.addEventListener('click', fetchAll);
+  setupDashboardControls();
 }
 
 /* ── API ────────────────────────────────────────────────────────────────────── */
@@ -47,17 +48,48 @@ async function api(method, path, body) {
 }
 
 /* ── Dashboard ──────────────────────────────────────────────────────────────── */
+let allBreachesForTimeline = [];
+let timelineMonths = 3;
+let recentSortKey = 'notification_date';
+
 async function loadDashboard() {
   try {
-    const { data: stats } = await api('GET', '/api/stats');
+    const [{ data: stats }, { data: breaches }] = await Promise.all([
+      api('GET', '/api/stats'),
+      api('GET', '/api/breaches'),
+    ]);
+    allBreachesForTimeline = breaches || [];
     updateStatCards(stats);
     renderCharts(stats);
     renderSourceBars(stats.bySource);
-    renderRecentTable(stats.recentActivity || []);
+    renderTimelineChart(timelineMonths);
+    renderRecentTable(allBreachesForTimeline, recentSortKey);
     document.getElementById('last-updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
   } catch (e) {
     showToast('Failed to load dashboard', 'error');
   }
+}
+
+function setupDashboardControls() {
+  // Timeline month filter buttons
+  document.querySelectorAll('.timeline-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.timeline-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      timelineMonths = parseInt(btn.dataset.months);
+      renderTimelineChart(timelineMonths);
+    });
+  });
+
+  // Recent incidents sort buttons
+  document.querySelectorAll('.recent-sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.recent-sort-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      recentSortKey = btn.dataset.sort;
+      renderRecentTable(allBreachesForTimeline, recentSortKey);
+    });
+  });
 }
 
 function updateStatCards(stats) {
@@ -164,22 +196,116 @@ function renderSourceBars(sources) {
   `).join('');
 }
 
-function renderRecentTable(items) {
+function renderTimelineChart(months) {
+  if (!allBreachesForTimeline.length) return;
+
+  // Build array of month labels going back N months from today
+  const now = new Date();
+  const labels = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    labels.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+
+  const occurrenceCounts = Object.fromEntries(labels.map(l => [l, 0]));
+  const notificationCounts = Object.fromEntries(labels.map(l => [l, 0]));
+
+  allBreachesForTimeline.forEach(b => {
+    const bd = (b.breach_date || '').slice(0, 7);
+    const nd = (b.notification_date || '').slice(0, 7);
+    if (occurrenceCounts[bd] !== undefined) occurrenceCounts[bd]++;
+    if (notificationCounts[nd] !== undefined) notificationCounts[nd]++;
+  });
+
+  const canvas = document.getElementById('chart-timeline');
+  if (!canvas) return;
+  if (charts['chart-timeline']) charts['chart-timeline'].destroy();
+
+  charts['chart-timeline'] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: labels.map(l => {
+        const [y, m] = l.split('-');
+        return new Date(y, m - 1).toLocaleString('default', { month: 'short', year: '2-digit' });
+      }),
+      datasets: [
+        {
+          label: 'Breach Occurred',
+          data: labels.map(l => occurrenceCounts[l]),
+          borderColor: '#f85149',
+          backgroundColor: 'rgba(248,81,73,.12)',
+          fill: true,
+          tension: .3,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+        {
+          label: 'Notification Published',
+          data: labels.map(l => notificationCounts[l]),
+          borderColor: '#58a6ff',
+          backgroundColor: 'rgba(88,166,255,.12)',
+          fill: true,
+          tension: .3,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { color: '#8b949e', font: { size: 11 }, boxWidth: 12, padding: 16 }
+        },
+        tooltip: {
+          backgroundColor: '#1c2128',
+          borderColor: '#30363d',
+          borderWidth: 1,
+          titleColor: '#e6edf3',
+          bodyColor: '#8b949e',
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#6e7681', font: { size: 11 } },
+          grid: { color: '#21262d' }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#6e7681', font: { size: 11 }, stepSize: 1 },
+          grid: { color: '#21262d' }
+        }
+      }
+    }
+  });
+}
+
+function renderRecentTable(items, sortKey = 'notification_date') {
   const tbody = document.getElementById('recent-tbody');
   if (!tbody) return;
-  if (!items.length) {
+
+  // Sort and take top 10
+  const sorted = [...items]
+    .filter(b => b[sortKey])
+    .sort((a, b) => (b[sortKey] || '').localeCompare(a[sortKey] || ''))
+    .slice(0, 10);
+
+  if (!sorted.length) {
     tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:32px">No recent incidents</td></tr>`;
     return;
   }
-  tbody.innerHTML = items.map(b => `
+  tbody.innerHTML = sorted.map(b => `
     <tr onclick="openDetail(${b.id})">
       <td class="td-org">${esc(b.organization)}</td>
       <td>
-        <div style="font-family:var(--font-mono);font-size:12px;color:var(--text)">${b.notification_date || '—'}</div>
+        <div style="font-family:var(--font-mono);font-size:12px;color:${sortKey === 'notification_date' ? 'var(--text)' : 'var(--text-muted)'}">${b.notification_date || '—'}</div>
         <div style="font-size:11px;color:var(--text-dim)">notified</div>
       </td>
       <td>
-        <div style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted)">${b.breach_date || '—'}</div>
+        <div style="font-family:var(--font-mono);font-size:12px;color:${sortKey === 'breach_date' ? 'var(--text)' : 'var(--text-muted)'}">${b.breach_date || '—'}</div>
         <div style="font-size:11px;color:var(--text-dim)">occurred</div>
       </td>
       <td>${breachTypeBadge(b.breach_type)}</td>
@@ -333,9 +459,7 @@ async function openDetail(id) {
       </div>
       <div class="detail-field">
         <div class="detail-label">Source</div>
-        <div class="detail-value">${b.source_url
-          ? `<a href="${esc(b.source_url)}" target="_blank" rel="noopener">${esc(b.source)}</a>`
-          : esc(b.source)}</div>
+        <div class="detail-value">${esc(b.source)}</div>
       </div>
       <div class="detail-field full">
         <div class="detail-label">Data Types Compromised</div>
