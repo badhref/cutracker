@@ -52,21 +52,23 @@
 
   function riskBadge(level) {
     const cls = {
-      known_legitimate: 'ss-risk-known-legitimate',
-      high:             'ss-risk-high',
-      suspicious:       'ss-risk-suspicious',
-      unverified:       'ss-risk-unverified',
-      watch:            'ss-risk-watch',
-      // Legacy compat for any rows stored before the scoring rewrite
-      critical:         'ss-risk-high',
+      known_legitimate:       'ss-risk-known-legitimate',
+      possible_official_match:'ss-risk-possible-match',
+      high:                   'ss-risk-high',
+      suspicious:             'ss-risk-suspicious',
+      unverified:             'ss-risk-unverified',
+      watch:                  'ss-risk-watch',
+      // Legacy compat for rows scored before the rewrite
+      critical:               'ss-risk-high',
     };
     const labels = {
-      known_legitimate: 'Known Legitimate',
-      high:             'High Risk',
-      suspicious:       'Suspicious',
-      unverified:       'Unverified',
-      watch:            'Watch',
-      critical:         'High Risk',
+      known_legitimate:       'Known Legitimate',
+      possible_official_match:'Possible Match',
+      high:                   'High Risk',
+      suspicious:             'Suspicious',
+      unverified:             'Unverified',
+      watch:                  'Watch',
+      critical:               'High Risk',
     };
     const label = labels[level] || (level ? level.charAt(0).toUpperCase() + level.slice(1) : 'Unknown');
     return `<span class="ss-badge ${cls[level] || 'ss-risk-watch'}">${esc(label)}</span>`;
@@ -132,8 +134,8 @@
       <!-- Stat cards -->
       <div class="ss-stat-grid" id="ss-stat-grid">
         <div class="ss-stat-card"><div class="ss-stat-label">Total Suspected</div><div class="ss-stat-value accent" id="ss-stat-total">—</div></div>
-        <div class="ss-stat-card"><div class="ss-stat-label">Critical</div><div class="ss-stat-value" style="color:#ff4040" id="ss-stat-critical">—</div></div>
-        <div class="ss-stat-card"><div class="ss-stat-label">High</div><div class="ss-stat-value danger" id="ss-stat-high">—</div></div>
+        <div class="ss-stat-card"><div class="ss-stat-label">High Risk</div><div class="ss-stat-value danger" id="ss-stat-high">—</div></div>
+        <div class="ss-stat-card"><div class="ss-stat-label">Unverified</div><div class="ss-stat-value" style="color:#8b949e" id="ss-stat-unverified">—</div></div>
         <div class="ss-stat-card"><div class="ss-stat-label">New Today</div><div class="ss-stat-value warning" id="ss-stat-new-today">—</div></div>
         <div class="ss-stat-card"><div class="ss-stat-label">Under Review</div><div class="ss-stat-value accent" id="ss-stat-under-review">—</div></div>
       </div>
@@ -330,20 +332,19 @@
 
   function updateStatCards(stats) {
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val ?? '0'; };
-    set('ss-stat-total', stats.total);
-    set('ss-stat-critical', stats.critical);
-    set('ss-stat-high', stats.high);
-    set('ss-stat-new-today', stats.newToday);
+    set('ss-stat-total',      stats.total);
+    set('ss-stat-high',       stats.high);
+    set('ss-stat-unverified', stats.unverified);
+    set('ss-stat-new-today',  stats.newToday);
 
     const underReview = (stats.byStatus || []).find(s => s.analyst_status === 'under_review');
     set('ss-stat-under-review', underReview?.count ?? 0);
 
-    // Update nav badge
+    // Nav badge: show high + suspicious count (the most urgent sites)
     const navBadge = document.getElementById('nav-sites-count');
     if (navBadge) {
-      const critical = stats.critical ?? 0;
-      const high = stats.high ?? 0;
-      navBadge.textContent = critical + high > 0 ? critical + high : stats.total ?? '—';
+      const urgent = (stats.high ?? 0) + (stats.suspicious ?? 0);
+      navBadge.textContent = urgent > 0 ? urgent : stats.total ?? '—';
     }
   }
 
@@ -466,12 +467,13 @@
 
   function riskColor(level) {
     const colors = {
-      known_legitimate: '#3fb950',
-      high:             '#f85149',
-      suspicious:       '#d29922',
-      unverified:       '#8b949e',
-      watch:            '#58a6ff',
-      critical:         '#f85149', // legacy compat
+      known_legitimate:       '#3fb950',
+      possible_official_match:'#56d364',
+      high:                   '#f85149',
+      suspicious:             '#d29922',
+      unverified:             '#8b949e',
+      watch:                  '#58a6ff',
+      critical:               '#f85149', // legacy compat
     };
     return colors[level] || 'var(--text)';
   }
@@ -733,7 +735,7 @@
       <div class="ss-indicators-title">Possible Infrastructure Overlap</div>
       <p class="ss-ai-disclaimer">Similarity scores indicate shared technical indicators only. They do NOT constitute confirmed attribution to the same actor.</p>
       ${!related || !related.length
-        ? '<div class="empty-state"><p>No similar sites identified.<br>Click "Find Similar" to compare against known sites.</p></div>'
+        ? '<div class="empty-state"><p>No similar sites found yet.<br>Click <strong>Find Similar</strong> to compare against all known suspected sites.</p></div>'
         : related.map(r => {
             let indicators = [];
             try { indicators = typeof r.shared_indicators_json === 'string' ? JSON.parse(r.shared_indicators_json) : (r.shared_indicators_json || []); } catch { indicators = []; }

@@ -309,6 +309,93 @@ function fakeResult(overrides = {}) {
   });
 
   // ────────────────────────────────────────────────────────────────────────────
+  console.log('\n[ possible_match: NCUA approximate match ]');
+
+  await test('possible_match + no suspicious signals → capped at 25, level unverified', () => {
+    const ncua = {
+      status:       'possible_match',
+      confidence:   50,
+      matched_name: 'Example Community FCU',
+      match: { cu_name: 'Example Community FCU', charter_number: '99999', state: 'CO' },
+    };
+    const scoring = scoreSite(fakeResult({
+      domain:        'examplecommunityfcu.org',
+      ncua_language: ['Federally insured by NCUA'],
+      has_login_form: true,
+      body_text:     'credit union member services federal share insurance',
+    }), ncua);
+
+    assert.strictEqual(scoring.score, 25, `Expected capped score of 25, got ${scoring.score}`);
+    assert.strictEqual(scoring.level, 'unverified', `Expected unverified, got ${scoring.level}`);
+    const f = scoring.factors.find(x => x.key === 'possible_official_match');
+    assert.ok(f, 'Expected possible_official_match factor');
+    assert.strictEqual(f.label, 'trust');
+  });
+
+  await test('possible_match + suspicious domain → falls through to full scoring', () => {
+    const ncua = {
+      status:       'possible_match',
+      matched_name: 'Example Community FCU',
+      match: { cu_name: 'Example Community FCU' },
+    };
+    const scoring = scoreSite(fakeResult({
+      domain:        'secure-login-examplefcu.net',
+      ncua_language: ['Federally insured by NCUA'],
+      has_login_form: true,
+    }), ncua);
+
+    // Should NOT be capped — suspicious domain overrides the possible match
+    assert.ok(scoring.score > 25, `Expected score > 25 with suspicious domain, got ${scoring.score}`);
+    assert.notStrictEqual(scoring.level, 'known_legitimate');
+    const domainFactor = scoring.factors.find(x => x.key === 'suspicious_domain_pattern');
+    assert.ok(domainFactor, 'Expected suspicious_domain_pattern factor to appear');
+  });
+
+  await test('possible_match + free email → falls through, suspicious_free_email factor present', () => {
+    const ncua = { status: 'possible_match', matched_name: 'Some CU', match: {} };
+    const scoring = scoreSite(fakeResult({
+      domain:  'somefcu.org',
+      emails:  ['contact@gmail.com'],
+      title:   'Some FCU',        // no "credit union" in title so CU-context is minimal
+      body_text: '',
+    }), ncua);
+    // The possible_match gate must NOT fire (free email is a red flag)
+    assert.ok(
+      !scoring.factors.some(f => f.key === 'possible_official_match'),
+      'possible_official_match factor should NOT appear when free email is present'
+    );
+    // Normal scoring should have run and detected the free email
+    assert.ok(
+      scoring.factors.some(f => f.key === 'suspicious_free_email'),
+      'suspicious_free_email factor should appear after gate falls through'
+    );
+  });
+
+  await test('not_checked + CU signals → unverified_legitimacy (not suspicious, not high)', () => {
+    const ncua = { status: 'not_checked', confidence: 0 };
+    const scoring = scoreSite(fakeResult({
+      domain:        'coloradofcu.org',
+      ncua_language: ['Federally insured by NCUA'],
+      has_login_form: true,
+      body_text:     'credit union federal share insurance member services',
+    }), ncua);
+
+    assert.ok(scoring.score < 60, `Expected score < 60, got ${scoring.score}`);
+    assert.notStrictEqual(scoring.level, 'suspicious', 'not_checked + CU signals must not be suspicious');
+    assert.notStrictEqual(scoring.level, 'high',       'not_checked + CU signals must not be high');
+    const f = scoring.factors.find(x => x.key === 'unverified_legitimacy');
+    assert.ok(f, 'Expected unverified_legitimacy factor');
+    assert.ok(f.reason.includes('Official NCUA dataset not loaded'), `Expected dataset note in reason, got: ${f.reason}`);
+  });
+
+  await test('not_checked does NOT add no_official_match penalty', () => {
+    const ncua = { status: 'not_checked' };
+    const scoring = scoreSite(fakeResult({ domain: 'anycu.org', ncua_language: ['NCUA'] }), ncua);
+    const noMatchFactor = scoring.factors.find(x => x.key === 'no_official_match');
+    assert.ok(!noMatchFactor, 'no_official_match should not appear when dataset is not_checked');
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
   console.log('\n[ Similarity ]');
 
   await test('findSimilarSites: no crash with empty candidate list', () => {
@@ -330,6 +417,24 @@ function fakeResult(overrides = {}) {
     const result = findSimilarSites(target, [candidate], {});
     assert.ok(result.length > 0, 'Should find match on shared favicon hash');
     assert.strictEqual(result[0].site_id, 2);
+  });
+
+  await test('findSimilarSites: works without URLSCAN_API_KEY (no env var needed)', () => {
+    // Confirm the similarity service has no dependency on external API keys
+    delete process.env.URLSCAN_API_KEY;
+    const target    = { id: 10, domain: 'cu-a.org', favicon_hash: 'x1', html_fingerprint: null, title: 'CU A' };
+    const candidate = { id: 11, domain: 'cu-b.org', favicon_hash: 'x1', html_fingerprint: null, title: 'CU B' };
+    const result = findSimilarSites(target, [candidate], {});
+    assert.ok(Array.isArray(result), 'Should return array regardless of API key presence');
+    assert.ok(result.length > 0, 'Should still detect favicon match without API key');
+  });
+
+  await test('findSimilarSites: returns empty array (not error) when no matches', () => {
+    const target    = { id: 20, domain: 'unique-a.org', favicon_hash: 'zzz', html_fingerprint: null, title: 'Unique' };
+    const candidate = { id: 21, domain: 'unique-b.org', favicon_hash: 'yyy', html_fingerprint: null, title: 'Different' };
+    const result = findSimilarSites(target, [candidate], {});
+    assert.ok(Array.isArray(result), 'Should return array');
+    assert.strictEqual(result.length, 0, 'Should return empty array when no overlap');
   });
 
   await test('findSimilarSites: matches on shared analytics ID via evidenceMap', () => {

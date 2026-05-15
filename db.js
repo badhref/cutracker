@@ -532,10 +532,25 @@ function addSiteToCluster(clusterId, siteId) {
 function getSiteStats() {
   const db = getDb();
   const total = db.prepare('SELECT COUNT(*) as n FROM ss_suspected_sites').get().n;
-  const critical = db.prepare("SELECT COUNT(*) as n FROM ss_suspected_sites WHERE risk_level = 'critical'").get().n;
-  const high = db.prepare("SELECT COUNT(*) as n FROM ss_suspected_sites WHERE risk_level = 'high'").get().n;
-  const suspicious = db.prepare("SELECT COUNT(*) as n FROM ss_suspected_sites WHERE risk_level = 'suspicious'").get().n;
-  const watch = db.prepare("SELECT COUNT(*) as n FROM ss_suspected_sites WHERE risk_level = 'watch'").get().n;
+
+  // Current risk levels: known_legitimate, watch, unverified, suspicious, high
+  // 'critical' is remapped to 'high' for legacy rows scored before the rewrite.
+  const high = db.prepare(
+    "SELECT COUNT(*) as n FROM ss_suspected_sites WHERE risk_level IN ('high', 'critical')"
+  ).get().n;
+  const suspicious = db.prepare(
+    "SELECT COUNT(*) as n FROM ss_suspected_sites WHERE risk_level = 'suspicious'"
+  ).get().n;
+  const unverified = db.prepare(
+    "SELECT COUNT(*) as n FROM ss_suspected_sites WHERE risk_level = 'unverified'"
+  ).get().n;
+  const watch = db.prepare(
+    "SELECT COUNT(*) as n FROM ss_suspected_sites WHERE risk_level = 'watch'"
+  ).get().n;
+  const known_legitimate = db.prepare(
+    "SELECT COUNT(*) as n FROM ss_suspected_sites WHERE risk_level = 'known_legitimate'"
+  ).get().n;
+
   const newToday = db.prepare(
     "SELECT COUNT(*) as n FROM ss_suspected_sites WHERE date(created_at) = date('now')"
   ).get().n;
@@ -546,7 +561,7 @@ function getSiteStats() {
     'SELECT source, COUNT(*) as count FROM ss_suspected_sites WHERE source IS NOT NULL GROUP BY source ORDER BY count DESC'
   ).all();
 
-  return { total, critical, high, suspicious, watch, newToday, byStatus, bySource };
+  return { total, high, suspicious, unverified, watch, known_legitimate, newToday, byStatus, bySource };
 }
 
 module.exports = {

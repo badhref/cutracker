@@ -783,13 +783,14 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   white-space: nowrap;
 }
 
-.ss-risk-known-legitimate { background: rgba(63,185,80,.15);  color: #3fb950;  border: 1px solid rgba(63,185,80,.4); }
-.ss-risk-high             { background: var(--danger-subtle); color: var(--danger); border: 1px solid var(--danger); }
+.ss-risk-known-legitimate { background: rgba(63,185,80,.15);   color: #3fb950;  border: 1px solid rgba(63,185,80,.4); }
+.ss-risk-possible-match   { background: rgba(86,211,100,.10);  color: #56d364;  border: 1px solid rgba(86,211,100,.35); }
+.ss-risk-high             { background: var(--danger-subtle);  color: var(--danger); border: 1px solid var(--danger); }
 .ss-risk-suspicious       { background: var(--warning-subtle); color: var(--warning); border: 1px solid var(--warning); }
-.ss-risk-unverified       { background: rgba(139,148,158,.15); color: #8b949e; border: 1px solid rgba(139,148,158,.4); }
-.ss-risk-watch            { background: rgba(88,166,255,.12); color: #58a6ff; border: 1px solid rgba(88,166,255,.4); }
+.ss-risk-unverified       { background: rgba(139,148,158,.15); color: #8b949e;  border: 1px solid rgba(139,148,158,.4); }
+.ss-risk-watch            { background: rgba(88,166,255,.12);  color: #58a6ff;  border: 1px solid rgba(88,166,255,.4); }
 /* Legacy alias — rows scored before the rewrite may still carry 'critical' */
-.ss-risk-critical         { background: var(--danger-subtle); color: var(--danger); border: 1px solid var(--danger); }
+.ss-risk-critical         { background: var(--danger-subtle);  color: var(--danger); border: 1px solid var(--danger); }
 
 /* ── Analyst status badges ───────────────────────────────────────────────────── */
 .ss-status-new                          { background: rgba(31,111,235,.15);  color: #58a6ff; border: 1px solid rgba(31,111,235,.4); }
@@ -902,13 +903,13 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
 .ss-risk-btn { border-radius: 20px !important; }
 .ss-risk-btn.active { background: var(--accent-subtle); color: var(--accent-hover); border-color: var(--accent); }
-.ss-risk-btn-known-legitimate.active { background: rgba(63,185,80,.15);  color: #3fb950; border-color: rgba(63,185,80,.6); }
-.ss-risk-btn-high.active             { background: var(--danger-subtle); color: var(--danger); border-color: var(--danger); }
+.ss-risk-btn-known-legitimate.active { background: rgba(63,185,80,.15);   color: #3fb950;  border-color: rgba(63,185,80,.6); }
+.ss-risk-btn-high.active             { background: var(--danger-subtle);  color: var(--danger); border-color: var(--danger); }
 .ss-risk-btn-suspicious.active       { background: var(--warning-subtle); color: var(--warning); border-color: var(--warning); }
-.ss-risk-btn-unverified.active       { background: rgba(139,148,158,.15); color: #8b949e; border-color: rgba(139,148,158,.5); }
-.ss-risk-btn-watch.active            { background: rgba(88,166,255,.12); color: #58a6ff; border-color: #58a6ff; }
+.ss-risk-btn-unverified.active       { background: rgba(139,148,158,.15); color: #8b949e;  border-color: rgba(139,148,158,.5); }
+.ss-risk-btn-watch.active            { background: rgba(88,166,255,.12);  color: #58a6ff;  border-color: #58a6ff; }
 /* Legacy */
-.ss-risk-btn-critical.active         { background: var(--danger-subtle); color: var(--danger); border-color: var(--danger); }
+.ss-risk-btn-critical.active         { background: var(--danger-subtle);  color: var(--danger); border-color: var(--danger); }
 
 .ss-filter-select {
   background: var(--bg);

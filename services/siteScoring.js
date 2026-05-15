@@ -71,7 +71,7 @@ function scoreSite(investigationResult, ncuaResult) {
   const r    = investigationResult || {};
   const ncua = ncuaResult || {};
 
-  // ── Legitimacy gate — runs before any other logic ─────────────────────────
+  // ── Gate 1: known_legitimate — highest priority, always runs first ──────────
   if (ncua.status === 'known_legitimate') {
     return {
       score:   0,
@@ -90,6 +90,34 @@ function scoreSite(investigationResult, ncuaResult) {
   const bodyLower   = (r.body_text   || '').toLowerCase();
   const titleLower  = (r.title       || '').toLowerCase();
   const domainLower = (r.domain      || '').toLowerCase();
+
+  // ── Gate 2: possible_match — approximate NCUA institution found ───────────
+  // An approximate match in the NCUA dataset is a trust-reducing signal.
+  // Cap score at 25 (unverified band) UNLESS overtly suspicious signals exist:
+  // suspicious domain pattern or free consumer email. Those two signals are
+  // unambiguous and override the positive match.
+  if (ncua.status === 'possible_match') {
+    const hasBadDomain = SUSPICIOUS_DOMAIN_PATTERNS.some(re => re.test(domainLower));
+    const hasFreeEmail = (r.emails || []).some(email =>
+      FREE_EMAIL_DOMAINS.some(d => email.toLowerCase().endsWith('@' + d))
+    );
+    if (!hasBadDomain && !hasFreeEmail) {
+      return {
+        score:  25,
+        level:  'unverified',
+        factors: [
+          {
+            key:    'possible_official_match',
+            points: 25,
+            label:  'trust',
+            reason: `Approximate match found in NCUA institution dataset: "${ncua.matched_name || 'unknown institution'}". Score is capped — this site likely corresponds to a registered credit union. Analyst verification recommended to confirm the match before escalating.`,
+          },
+        ],
+      };
+    }
+    // Suspicious signals exist alongside the NCUA match — fall through to full
+    // scoring. The no_official_match penalty will NOT fire (status !== no_match_found).
+  }
 
   // ── Detect overtly suspicious signals ────────────────────────────────────
   // These are unusual on ANY site, including legitimate credit unions.
@@ -245,11 +273,14 @@ function scoreSite(investigationResult, ncuaResult) {
     // Site looks like a credit union but nothing overtly suspicious detected.
     // Status: unverified_legitimacy — needs human review, NOT high risk.
     // We push a single composite factor to reach the 'unverified' band (30–59).
+    const datasetNote = ncua.status === 'not_checked'
+      ? ' Official NCUA dataset not loaded — unable to confirm or deny this domain is registered. Classification reflects absence of suspicious signals only.'
+      : '';
     factors.push({
       key:    'unverified_legitimacy',
       points: 30,
       label:  'neutral',
-      reason: 'Site presents credit union characteristics (NCUA language, member services, institutional terminology) but has not been verified against official records. This alone does not indicate fraud — many small or regional credit unions are not yet in the reference dataset.',
+      reason: `Site presents credit union characteristics (NCUA language, member services, institutional terminology) but has not been verified against official records. This alone does not indicate fraud — many small or regional credit unions are not yet in the reference dataset.${datasetNote}`,
     });
     // Record each CU signal as informational (0 additional pts)
     for (const f of cuContextFactors) {

@@ -243,6 +243,15 @@ app.post('/api/sites/investigate', async (req, res) => {
     const ncua   = await validateWithNcua(result.domain, result.title);
     const scoring = scoreSite(result, ncua);
 
+    // Derive initial analyst status from NCUA validation result
+    // possible_match → needs_review so analyst can confirm the institution
+    // known_legitimate → likely_benign (scoring already returned 0)
+    const initialStatus = (() => {
+      if (ncua.status === 'known_legitimate') return 'likely_benign';
+      if (ncua.status === 'possible_match')   return 'needs_review';
+      return 'new';
+    })();
+
     // Upsert site
     const { id, isNew } = upsertSite({
       url: result.url,
@@ -251,7 +260,7 @@ app.post('/api/sites/investigate', async (req, res) => {
       source: 'Manual Investigation',
       risk_score: scoring.score,
       risk_level: scoring.level,
-      analyst_status: 'new',
+      analyst_status: initialStatus,
       title: result.title ?? null,
       meta_description: result.meta_description ?? null,
       favicon_hash: result.favicon_hash ?? null,
@@ -268,6 +277,30 @@ app.post('/api/sites/investigate', async (req, res) => {
     if (result.ncua_language?.length)   evidenceItems.push({ evidence_type: 'ncua_language',  evidence_value: result.ncua_language.join(' | '),   confidence: 95 });
     if (result.analytics_ids?.length)   evidenceItems.push({ evidence_type: 'analytics_id',   evidence_value: result.analytics_ids.join(', '),    confidence: 80 });
     if (result.has_login_form)          evidenceItems.push({ evidence_type: 'login_form',      evidence_value: 'Password input field detected',     confidence: 85 });
+
+    // NCUA validation status — always store so analysts know what dataset quality was present
+    evidenceItems.push({
+      evidence_type:  'ncua_validation_status',
+      evidence_value: JSON.stringify({
+        status:         ncua.status,
+        reason:         ncua.reason,
+        matched_name:   ncua.matched_name ?? null,
+        matched_domain: ncua.matched_domain ?? null,
+        dataset_loaded: !['not_checked', 'error'].includes(ncua.status),
+      }),
+      source_page: 'ncua_validation',
+      confidence:  100,
+    });
+
+    // When NCUA found an approximate institutional match, store it as trust evidence
+    if (ncua.status === 'possible_match' && ncua.match) {
+      evidenceItems.push({
+        evidence_type:  'ncua_possible_match',
+        evidence_value: JSON.stringify(ncua.match),
+        source_page:    'ncua_validation',
+        confidence:     50,
+      });
+    }
 
     // Store scoring factors as evidence
     for (const factor of scoring.factors) {
