@@ -26,6 +26,7 @@ function setupNav() {
       if (view === 'analytics') loadAnalytics();
       if (view === 'sources') loadSources();
       if (view === 'fetch-log') loadFetchLog();
+      if (view === 'sites' && window.sitesDashboard) window.sitesDashboard.load();
     });
   });
 }
@@ -98,6 +99,18 @@ function updateStatCards(stats) {
   document.getElementById('stat-active').textContent =
     stats.bySource?.reduce((n, s) => n + s.count, 0)?.toLocaleString() ?? '0';
   document.getElementById('nav-count').textContent = stats.total ?? 0;
+
+  // Best-effort update of the sites nav badge (non-blocking)
+  api('GET', '/api/sites/stats').then(result => {
+    if (!result?.data) return;
+    const badge = document.getElementById('nav-sites-count');
+    if (!badge) return;
+    const critical = result.data.critical ?? 0;
+    const high = result.data.high ?? 0;
+    const alertCount = critical + high;
+    badge.textContent = alertCount > 0 ? alertCount : (result.data.total ?? '—');
+    if (alertCount > 0) badge.style.background = 'var(--danger-subtle)';
+  }).catch(() => {}); // non-blocking — ignore errors
 }
 
 function renderCharts(stats) {
