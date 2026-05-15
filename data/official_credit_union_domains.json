@@ -6,6 +6,12 @@
     "notes": "Largest credit union in the US by assets. Chartered 1933."
   },
   {
+    "name": "Bellco Credit Union",
+    "domains": ["bellco.org", "www.bellco.org"],
+    "status": "known_legitimate",
+    "notes": "Colorado-based credit union, chartered 1936."
+  },
+  {
     "name": "National Credit Union Administration (NCUA)",
     "domains": ["ncua.gov", "www.ncua.gov", "mapping.ncua.gov", "mycreditunion.gov"],
     "status": "known_legitimate",

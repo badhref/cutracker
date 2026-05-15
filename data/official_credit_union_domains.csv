@@ -1,0 +1,14 @@
+name,domain,charter_number,city,state,source
+# CSV import template — one row per domain (a credit union with two domains = two rows)
+# Lines starting with # are ignored.
+# Columns:
+#   name           — Full legal name of the institution
+#   domain         — One domain (e.g. navyfederal.org or www.navyfederal.org)
+#   charter_number — NCUA charter number (optional)
+#   city           — City of record (optional)
+#   state          — Two-letter state code (optional)
+#   source         — How this entry was obtained (e.g. "NCUA FOICU.txt 2025-Q1")
+#
+# Example rows (remove the leading # to activate):
+# Navy Federal Credit Union,navyfederal.org,5536,Vienna,VA,NCUA FOICU.txt 2025-Q1
+# Navy Federal Credit Union,www.navyfederal.org,5536,Vienna,VA,NCUA FOICU.txt 2025-Q1

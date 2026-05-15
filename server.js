@@ -13,7 +13,7 @@ const {
 const { runAllFetchers, runFetcherByName, getFetcherNames, seedDemoData } = require('./fetchers/index');
 const { investigateSite } = require('./services/siteInvestigator');
 const { scoreSite } = require('./services/siteScoring');
-const { validateWithNcua } = require('./services/ncuaValidation');
+const { validateWithNcua, getAllowlistStats, reloadAllowlists } = require('./services/ncuaValidation');
 const { runAiAnalysis } = require('./services/aiAnalysis');
 const { findSimilarSites } = require('./services/similarity');
 const { generateEvidencePackage } = require('./services/evidencePackage');
@@ -99,6 +99,26 @@ app.delete('/api/breaches/:id', (req, res) => {
 app.get('/api/stats', (req, res) => {
   try {
     res.json({ success: true, data: getStats() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── Allowlist admin ────────────────────────────────────────────────────────────
+
+app.get('/api/allowlist/stats', (req, res) => {
+  try {
+    res.json({ success: true, data: getAllowlistStats() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/allowlist/reload — call after uploading a new CSV without restarting
+app.post('/api/allowlist/reload', (req, res) => {
+  try {
+    reloadAllowlists();
+    res.json({ success: true, data: getAllowlistStats(), message: 'Allowlist caches cleared. Next lookup will re-read JSON and CSV files.' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
