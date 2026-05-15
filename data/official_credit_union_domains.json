@@ -1,0 +1,50 @@
+[
+  {
+    "name": "Navy Federal Credit Union",
+    "domains": ["navyfederal.org", "www.navyfederal.org"],
+    "status": "known_legitimate",
+    "notes": "Largest credit union in the US by assets. Chartered 1933."
+  },
+  {
+    "name": "National Credit Union Administration (NCUA)",
+    "domains": ["ncua.gov", "www.ncua.gov", "mapping.ncua.gov", "mycreditunion.gov"],
+    "status": "known_legitimate",
+    "notes": "Federal regulatory agency. Not a credit union — should never be scored."
+  },
+  {
+    "name": "Pentagon Federal Credit Union",
+    "domains": ["penfed.org", "www.penfed.org"],
+    "status": "known_legitimate",
+    "notes": "Second-largest US federal credit union."
+  },
+  {
+    "name": "Schools First Federal Credit Union",
+    "domains": ["schoolsfirstfcu.org", "www.schoolsfirstfcu.org"],
+    "status": "known_legitimate",
+    "notes": "Largest credit union in California."
+  },
+  {
+    "name": "State Employees' Credit Union",
+    "domains": ["ncsecu.org", "www.ncsecu.org"],
+    "status": "known_legitimate",
+    "notes": "Second-largest US credit union by membership."
+  },
+  {
+    "name": "Boeing Employees Credit Union",
+    "domains": ["becu.org", "www.becu.org"],
+    "status": "known_legitimate",
+    "notes": "Largest credit union in the Pacific Northwest."
+  },
+  {
+    "name": "America First Credit Union",
+    "domains": ["americafirst.com", "www.americafirst.com"],
+    "status": "known_legitimate",
+    "notes": "Utah-based federal credit union."
+  },
+  {
+    "name": "Golden 1 Credit Union",
+    "domains": ["golden1.com", "www.golden1.com"],
+    "status": "known_legitimate",
+    "notes": "California state-chartered credit union."
+  }
+]

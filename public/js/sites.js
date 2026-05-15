@@ -52,12 +52,23 @@
 
   function riskBadge(level) {
     const cls = {
-      critical:   'ss-risk-critical',
-      high:       'ss-risk-high',
-      suspicious: 'ss-risk-suspicious',
-      watch:      'ss-risk-watch',
+      known_legitimate: 'ss-risk-known-legitimate',
+      high:             'ss-risk-high',
+      suspicious:       'ss-risk-suspicious',
+      unverified:       'ss-risk-unverified',
+      watch:            'ss-risk-watch',
+      // Legacy compat for any rows stored before the scoring rewrite
+      critical:         'ss-risk-high',
     };
-    const label = level ? level.charAt(0).toUpperCase() + level.slice(1) : 'Unknown';
+    const labels = {
+      known_legitimate: 'Known Legitimate',
+      high:             'High Risk',
+      suspicious:       'Suspicious',
+      unverified:       'Unverified',
+      watch:            'Watch',
+      critical:         'High Risk',
+    };
+    const label = labels[level] || (level ? level.charAt(0).toUpperCase() + level.slice(1) : 'Unknown');
     return `<span class="ss-badge ${cls[level] || 'ss-risk-watch'}">${esc(label)}</span>`;
   }
 
@@ -131,10 +142,11 @@
       <div class="ss-filter-bar">
         <div class="ss-risk-btns">
           <button class="btn btn-secondary btn-sm ss-risk-btn active" data-risk="">All Levels</button>
-          <button class="btn btn-secondary btn-sm ss-risk-btn ss-risk-btn-critical" data-risk="critical">Critical</button>
-          <button class="btn btn-secondary btn-sm ss-risk-btn ss-risk-btn-high" data-risk="high">High</button>
+          <button class="btn btn-secondary btn-sm ss-risk-btn ss-risk-btn-high" data-risk="high">High Risk</button>
           <button class="btn btn-secondary btn-sm ss-risk-btn ss-risk-btn-suspicious" data-risk="suspicious">Suspicious</button>
+          <button class="btn btn-secondary btn-sm ss-risk-btn ss-risk-btn-unverified" data-risk="unverified">Unverified</button>
           <button class="btn btn-secondary btn-sm ss-risk-btn ss-risk-btn-watch" data-risk="watch">Watch</button>
+          <button class="btn btn-secondary btn-sm ss-risk-btn ss-risk-btn-known-legitimate" data-risk="known_legitimate">Known Legit</button>
         </div>
         <select id="ss-status-filter" class="ss-filter-select">
           <option value="">All Statuses</option>
@@ -453,7 +465,14 @@
   }
 
   function riskColor(level) {
-    const colors = { critical: '#ff4040', high: '#f85149', suspicious: '#d29922', watch: '#58a6ff' };
+    const colors = {
+      known_legitimate: '#3fb950',
+      high:             '#f85149',
+      suspicious:       '#d29922',
+      unverified:       '#8b949e',
+      watch:            '#58a6ff',
+      critical:         '#f85149', // legacy compat
+    };
     return colors[level] || 'var(--text)';
   }
 
@@ -802,7 +821,8 @@
     try {
       const result = await ssApi('POST', `/api/sites/${siteId}/find-similar`);
       if (!result.success) { showToast('Similarity search failed: ' + result.error, 'error'); return; }
-      const count = (result.data || []).length;
+      const related = result.data?.related_sites || result.data || [];
+      const count = Array.isArray(related) ? related.length : 0;
       showToast(`Found ${count} site(s) with possible infrastructure overlap`, count > 0 ? 'success' : 'info');
       await loadDetailPanelData(siteId);
       document.querySelector('.ss-tab[data-tab="similar"]')?.click();

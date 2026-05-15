@@ -218,10 +218,10 @@ app.post('/api/sites/investigate', async (req, res) => {
       return res.status(400).json({ success: false, error: 'url is required' });
     }
 
-    // Run investigation
+    // Run investigation — validate legitimacy FIRST so scoring can gate on it
     const result = await investigateSite(url);
-    const scoring = scoreSite(result);
-    const ncua = await validateWithNcua(result.domain, result.title);
+    const ncua   = await validateWithNcua(result.domain, result.title);
+    const scoring = scoreSite(result, ncua);
 
     // Upsert site
     const { id, isNew } = upsertSite({
@@ -319,7 +319,20 @@ app.post('/api/sites/:id/find-similar', async (req, res) => {
     if (!site) return res.status(404).json({ success: false, error: 'Not found' });
 
     const allSites = getSites({ limit: 1000 });
-    const matches = findSimilarSites(site, allSites);
+
+    // Build evidenceMap so phone/email/analytics comparisons work correctly.
+    // Without this, similarity comparisons only use favicon/html/title/footer
+    // (fields on the site row) and miss all evidence-table indicators.
+    const evidenceMap = {};
+    for (const s of allSites) {
+      evidenceMap[s.id] = getSiteEvidence(s.id);
+    }
+    // Ensure the target site is included even if it wasn't in getSites result
+    if (!evidenceMap[site.id]) {
+      evidenceMap[site.id] = getSiteEvidence(site.id);
+    }
+
+    const matches = findSimilarSites(site, allSites, evidenceMap);
 
     for (const match of matches) {
       addRelatedSite({
@@ -331,7 +344,16 @@ app.post('/api/sites/:id/find-similar', async (req, res) => {
     }
     auditLog(site.id, 'similarity_search', `Found ${matches.length} possible infrastructure overlap(s)`);
 
-    res.json({ success: true, data: matches });
+    res.json({
+      success: true,
+      data: {
+        site_id:      site.id,
+        related_sites: matches,
+        message:      matches.length > 0
+          ? `Found ${matches.length} site(s) with possible infrastructure overlap.`
+          : 'No sites with sufficient infrastructure overlap detected.',
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
