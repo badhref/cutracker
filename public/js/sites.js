@@ -214,6 +214,45 @@
 
       <!-- Panel backdrop -->
       <div class="ss-panel-backdrop hidden" id="ss-panel-backdrop"></div>
+
+      <!-- Mark as Legitimate modal -->
+      <div class="modal-backdrop hidden" id="ss-legit-modal-backdrop">
+        <div class="modal" style="max-width:480px">
+          <div class="modal-header">
+            <span class="modal-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;vertical-align:-3px;margin-right:6px;color:#3fb950"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+              Mark as Known Legitimate
+            </span>
+            <button class="modal-close" id="ss-legit-modal-close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <p style="font-size:13px;color:var(--text-dim);margin:0 0 16px">
+              This action will add the domain to the local verified allowlist, reset the risk score to 0, and set the status to <strong>Likely Benign</strong>. The change is recorded in the audit log.
+            </p>
+            <div style="margin-bottom:14px">
+              <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">Domain being verified</label>
+              <div id="ss-legit-modal-domain" style="font-family:var(--font-mono);font-size:13px;color:var(--text);padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius)">—</div>
+            </div>
+            <div style="margin-bottom:14px">
+              <label for="ss-legit-name-input" style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">Institution name <span style="color:var(--text-muted)">(will be saved to the allowlist)</span></label>
+              <input id="ss-legit-name-input" type="text" class="form-control" placeholder="e.g. Riverside Teachers Credit Union" style="width:100%">
+            </div>
+            <div>
+              <label for="ss-legit-notes-input" style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">Analyst notes <span style="color:var(--text-muted)">(optional)</span></label>
+              <textarea id="ss-legit-notes-input" class="form-control" rows="2" placeholder="How was this verified? (e.g. Confirmed via NCUA charter search #12345)"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer" style="justify-content:flex-end;gap:8px">
+            <button class="btn btn-secondary btn-sm" id="ss-legit-modal-cancel">Cancel</button>
+            <button class="btn btn-success btn-sm" id="ss-legit-modal-confirm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Confirm — Mark as Legitimate
+            </button>
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -280,6 +319,14 @@
         if (content) content.classList.remove('hidden');
       });
     });
+
+    // Mark as Legitimate modal wiring
+    document.getElementById('ss-legit-modal-close')?.addEventListener('click', closeMarkLegitModal);
+    document.getElementById('ss-legit-modal-cancel')?.addEventListener('click', closeMarkLegitModal);
+    document.getElementById('ss-legit-modal-backdrop')?.addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeMarkLegitModal();
+    });
+    document.getElementById('ss-legit-modal-confirm')?.addEventListener('click', confirmMarkLegitimate);
   }
 
   // ── Investigate handler ──────────────────────────────────────────────────────
@@ -500,6 +547,11 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
           Evidence Package
         </button>
+        ${site.risk_level !== 'known_legitimate' ? `
+        <button class="btn btn-success btn-sm" id="ss-btn-mark-legit">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          Mark as Legitimate
+        </button>` : ''}
         <button class="btn btn-danger btn-sm" id="ss-btn-delete">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
           Delete
@@ -520,6 +572,7 @@
     document.getElementById('ss-btn-ai-analyze')?.addEventListener('click', () => handleAiAnalysis(site.id));
     document.getElementById('ss-btn-find-similar')?.addEventListener('click', () => handleFindSimilar(site.id));
     document.getElementById('ss-btn-evidence-pkg')?.addEventListener('click', () => handleEvidencePackage(site.id, site.domain));
+    document.getElementById('ss-btn-mark-legit')?.addEventListener('click', () => openMarkLegitModal(site));
     document.getElementById('ss-btn-delete')?.addEventListener('click', () => handleDelete(site.id, site.domain));
     document.getElementById('ss-btn-save-status')?.addEventListener('click', () => handleSaveStatus(site.id));
   }
@@ -625,15 +678,40 @@
             <th>Recorded</th>
           </tr></thead>
           <tbody>
-            ${evidence.map(e => `
+            ${evidence.map(e => {
+              // Pretty-print structured evidence types
+              let displayValue = e.evidence_value;
+              const STRUCTURED = ['scoring_factor', 'analyst_verification', 'ncua_validation_status',
+                                  'ncua_possible_match'];
+              if (STRUCTURED.includes(e.evidence_type)) {
+                try {
+                  const parsed = JSON.parse(e.evidence_value);
+                  if (e.evidence_type === 'analyst_verification') {
+                    displayValue = `✓ Marked legitimate — ${parsed.institution_name || ''}` +
+                      (parsed.analyst_notes ? ` | Notes: ${parsed.analyst_notes}` : '') +
+                      (parsed.added_to_allowlist ? ' | Added to allowlist' : ' | Already in allowlist');
+                  } else if (e.evidence_type === 'ncua_validation_status') {
+                    displayValue = `NCUA status: ${parsed.status}` +
+                      (parsed.matched_name ? ` | Match: ${parsed.matched_name}` : '') +
+                      ` | Dataset loaded: ${parsed.dataset_loaded ? 'yes' : 'no'}`;
+                  } else if (e.evidence_type === 'ncua_possible_match') {
+                    displayValue = `Possible match: ${parsed.cu_name || ''}` +
+                      (parsed.state ? `, ${parsed.state}` : '') +
+                      (parsed.charter_number ? ` | Charter #${parsed.charter_number}` : '');
+                  } else if (e.evidence_type === 'scoring_factor') {
+                    displayValue = `[${parsed.label || ''}] ${parsed.key}: ${parsed.points >= 0 ? '+' : ''}${parsed.points}pts — ${parsed.reason || ''}`;
+                  }
+                } catch { /* keep raw */ }
+              }
+              return `
               <tr>
-                <td><span class="badge badge-default">${esc(e.evidence_type)}</span></td>
-                <td style="font-size:12px;max-width:280px;word-break:break-all">${esc(e.evidence_value)}</td>
+                <td><span class="badge badge-default">${esc(e.evidence_type.replace(/_/g, ' '))}</span></td>
+                <td style="font-size:12px;max-width:320px;word-break:break-word;white-space:pre-wrap">${esc(displayValue)}</td>
                 <td class="td-num">${e.confidence ?? '—'}%</td>
                 <td style="font-size:12px;color:var(--text-muted)">${esc(e.source_page || '—')}</td>
                 <td style="font-size:12px;color:var(--text-dim)">${fmtDate(e.created_at)}</td>
-              </tr>
-            `).join('')}
+              </tr>`;
+            }).join('')}
           </tbody>
         </table>
       </div>
@@ -774,6 +852,70 @@
         `).join('')}
       </div>
     `;
+  }
+
+  // ── Mark as Legitimate modal ──────────────────────────────────────────────────
+  let _legitSite = null; // site currently staged in the modal
+
+  function openMarkLegitModal(site) {
+    _legitSite = site;
+    const modal = document.getElementById('ss-legit-modal-backdrop');
+    const domainEl = document.getElementById('ss-legit-modal-domain');
+    const nameInput = document.getElementById('ss-legit-name-input');
+    const notesInput = document.getElementById('ss-legit-notes-input');
+    if (!modal) return;
+
+    if (domainEl) domainEl.textContent = site.domain || site.url;
+    if (nameInput) nameInput.value = site.title || '';
+    if (notesInput) notesInput.value = '';
+
+    modal.classList.remove('hidden');
+    nameInput?.focus();
+  }
+
+  function closeMarkLegitModal() {
+    const modal = document.getElementById('ss-legit-modal-backdrop');
+    if (modal) modal.classList.add('hidden');
+    _legitSite = null;
+  }
+
+  async function confirmMarkLegitimate() {
+    if (!_legitSite) return;
+    const site = _legitSite;
+
+    const nameInput  = document.getElementById('ss-legit-name-input');
+    const notesInput = document.getElementById('ss-legit-notes-input');
+    const confirmBtn = document.getElementById('ss-legit-modal-confirm');
+
+    const institution_name = (nameInput?.value || '').trim() || site.title || site.domain;
+    const notes = (notesInput?.value || '').trim() || null;
+
+    if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.innerHTML = '<div class="spinner"></div> Saving...'; }
+
+    try {
+      const result = await ssApi('POST', `/api/sites/${site.id}/mark-legitimate`, { institution_name, notes });
+
+      if (!result.success) {
+        showToast('Failed to mark as legitimate: ' + result.error, 'error');
+        return;
+      }
+
+      closeMarkLegitModal();
+      showToast(result.data?.message || 'Site marked as Known Legitimate', 'success');
+
+      // Refresh table + detail panel
+      await refreshSites();
+      await loadDetailPanelData(site.id);
+      // Switch to audit tab so analyst sees the new log entry
+      document.querySelector('.ss-tab[data-tab="audit"]')?.click();
+    } catch (err) {
+      showToast('Error: ' + err.message, 'error');
+    } finally {
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Confirm — Mark as Legitimate';
+      }
+    }
   }
 
   // ── Action handlers ──────────────────────────────────────────────────────────

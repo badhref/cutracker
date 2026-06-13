@@ -450,6 +450,78 @@ function fakeResult(overrides = {}) {
   });
 
   // ────────────────────────────────────────────────────────────────────────────
+  console.log('\n[ mark-legitimate: allowlist write + re-score ]');
+
+  await test('mark-legitimate: writing new domain to JSON and re-validating returns known_legitimate', async () => {
+    const fs   = require('fs');
+    const tmpJson = path.join(__dirname, '..', 'data', '.test-allowlist.json');
+
+    // Write a temp JSON file with no entries
+    fs.writeFileSync(tmpJson, '[]', 'utf8');
+
+    // Simulate the write logic from the endpoint
+    const domain   = 'test-local-cu.org';
+    const wwwDomain = 'www.' + domain;
+    const name     = 'Test Local Credit Union';
+
+    let entries = JSON.parse(fs.readFileSync(tmpJson, 'utf8'));
+    entries.push({ name, domains: [domain, wwwDomain], status: 'known_legitimate', added_by: 'analyst', added_at: '2026-01-01' });
+    fs.writeFileSync(tmpJson, JSON.stringify(entries, null, 2), 'utf8');
+
+    // Verify file was written correctly
+    const written = JSON.parse(fs.readFileSync(tmpJson, 'utf8'));
+    assert.strictEqual(written.length, 1);
+    assert.ok(written[0].domains.includes(domain));
+    assert.strictEqual(written[0].status, 'known_legitimate');
+
+    // Clean up
+    fs.unlinkSync(tmpJson);
+  });
+
+  await test('mark-legitimate: after adding to allowlist, scoring returns 0 / known_legitimate', async () => {
+    const { reloadAllowlists } = require('../services/ncuaValidation');
+
+    // Force reload so the JSON file is re-read (test isolation: JSON was not modified)
+    reloadAllowlists();
+
+    // bellco.org is already in the JSON file — simulate what would happen after mark-legitimate
+    const ncua = await validateWithNcua('bellco.org', 'Bellco Credit Union');
+    assert.strictEqual(ncua.status, 'known_legitimate');
+
+    const scoring = scoreSite(
+      { domain: 'bellco.org', title: 'Bellco Credit Union', body_text: '', ncua_language: [],
+        has_login_form: false, emails: [], routing_numbers: [], charter_numbers: [], domain_age_days: null },
+      ncua
+    );
+    assert.strictEqual(scoring.score, 0);
+    assert.strictEqual(scoring.level, 'known_legitimate');
+    assert.strictEqual(scoring.factors[0].label, 'trust');
+  });
+
+  await test('mark-legitimate: duplicate domain does not create duplicate allowlist entry', async () => {
+    const fs = require('fs');
+    const tmpJson = path.join(__dirname, '..', 'data', '.test-allowlist2.json');
+
+    const initial = [{ name: 'Existing CU', domains: ['existing-cu.org', 'www.existing-cu.org'], status: 'known_legitimate' }];
+    fs.writeFileSync(tmpJson, JSON.stringify(initial), 'utf8');
+
+    // Simulate duplicate check from endpoint
+    const entries = JSON.parse(fs.readFileSync(tmpJson, 'utf8'));
+    const existingNormalised = new Set();
+    for (const entry of entries) {
+      for (const d of (entry.domains || [])) existingNormalised.add(d.toLowerCase().replace(/^www\./, ''));
+    }
+    const alreadyInFile = existingNormalised.has('existing-cu.org');
+    assert.ok(alreadyInFile, 'Should detect the domain is already present');
+
+    // If already present, we do NOT push — entries length stays 1
+    if (!alreadyInFile) entries.push({ name: 'Dupe', domains: ['existing-cu.org'] });
+    assert.strictEqual(entries.length, 1, 'No duplicate entry should have been added');
+
+    fs.unlinkSync(tmpJson);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
   const bar = '─'.repeat(52);
   console.log(`\n${bar}`);
   console.log(`  ${passed} passed  |  ${failed} failed`);

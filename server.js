@@ -1,7 +1,8 @@
 const express = require('express');
-const cors = require('cors');
-const cron = require('node-cron');
-const path = require('path');
+const cors    = require('cors');
+const cron    = require('node-cron');
+const path    = require('path');
+const fs      = require('fs');
 const {
   getBreaches, getBreach, upsertBreach, deleteBreach, getStats, getFetchLog,
   initSitesSchema, upsertSite, getSites, getSite, deleteSite,
@@ -426,6 +427,116 @@ app.post('/api/sites/:id/status', (req, res) => {
     auditLog(site.id, 'status_changed', `Status changed to: ${status}${notes ? '. Notes: ' + notes : ''}`);
 
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── Mark as Known Legitimate ───────────────────────────────────────────────────
+// Analyst action: manually verify a domain as a real, legitimate credit union.
+// Writes to official_credit_union_domains.json, reloads the allowlist cache,
+// re-validates the domain (will now return known_legitimate), re-scores the site
+// (score → 0), updates analyst_status → likely_benign, and records an audit entry.
+app.post('/api/sites/:id/mark-legitimate', async (req, res) => {
+  try {
+    const site = getSite(parseInt(req.params.id));
+    if (!site) return res.status(404).json({ success: false, error: 'Not found' });
+
+    const { institution_name, notes } = req.body;
+    const name       = (institution_name || '').trim() || site.title || site.domain;
+    const rawDomain  = (site.domain || '').replace(/^www\./, '').toLowerCase();
+    const wwwDomain  = 'www.' + rawDomain;
+    const domainsToAdd = [rawDomain, wwwDomain];
+
+    // ── 1. Update official_credit_union_domains.json ──────────────────────────
+    const jsonPath = path.join(__dirname, 'data', 'official_credit_union_domains.json');
+    let entries = [];
+    try {
+      entries = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+      if (!Array.isArray(entries)) entries = [];
+    } catch {
+      entries = [];
+    }
+
+    // Check whether domain is already present (normalised comparison)
+    const existingNormalised = new Set();
+    for (const entry of entries) {
+      for (const d of (entry.domains || [])) {
+        existingNormalised.add(d.toLowerCase().replace(/^www\./, ''));
+      }
+    }
+    const alreadyInFile = existingNormalised.has(rawDomain);
+
+    if (!alreadyInFile) {
+      entries.push({
+        name,
+        domains: domainsToAdd,
+        status:    'known_legitimate',
+        added_by:  'analyst',
+        added_at:  new Date().toISOString().slice(0, 10),
+        notes:     notes ? notes.trim() : 'Manually verified by analyst',
+      });
+      fs.writeFileSync(jsonPath, JSON.stringify(entries, null, 2) + '\n', 'utf8');
+    }
+
+    // ── 2. Reload allowlist caches so the new entry takes effect immediately ──
+    reloadAllowlists();
+
+    // ── 3. Re-validate — should now return known_legitimate ──────────────────
+    const ncua = await validateWithNcua(site.domain, site.title);
+
+    // ── 4. Re-score — known_legitimate gate returns score 0 ──────────────────
+    // Pass minimal investigation result; known_legitimate gate fires before
+    // any content signals are evaluated.
+    const scoring = scoreSite(
+      { domain: site.domain, title: site.title, body_text: '', ncua_language: [], has_login_form: false,
+        emails: [], routing_numbers: [], charter_numbers: [], domain_age_days: null },
+      ncua
+    );
+
+    // ── 5. Persist updated score + status ────────────────────────────────────
+    updateSiteScore(site.id, scoring.score, scoring.level);
+    updateSiteStatus(site.id, 'likely_benign');
+
+    // ── 6. Evidence record ────────────────────────────────────────────────────
+    addSiteEvidence({
+      site_id:        site.id,
+      evidence_type:  'analyst_verification',
+      evidence_value: JSON.stringify({
+        action:             'mark_legitimate',
+        institution_name:   name,
+        added_to_allowlist: !alreadyInFile,
+        domains_added:      alreadyInFile ? [] : domainsToAdd,
+        analyst_notes:      notes ? notes.trim() : null,
+      }),
+      source_page: 'analyst_action',
+      confidence:  100,
+    });
+
+    // ── 7. Audit log ──────────────────────────────────────────────────────────
+    const location = alreadyInFile
+      ? `domain "${site.domain}" was already present in the allowlist`
+      : `added "${rawDomain}" and "${wwwDomain}" to official_credit_union_domains.json`;
+    const notesClause = notes ? ` Analyst notes: ${notes.trim()}` : '';
+    auditLog(
+      site.id,
+      'marked_legitimate',
+      `Analyst marked as Known Legitimate. Institution: "${name}". ${location}. Risk reset to 0.${notesClause}`
+    );
+
+    const updatedSite = getSite(site.id);
+    res.json({
+      success: true,
+      data: {
+        site:               updatedSite,
+        scoring,
+        ncua,
+        already_in_allowlist: alreadyInFile,
+        message: alreadyInFile
+          ? `Domain was already in the allowlist. Site score and status updated.`
+          : `"${rawDomain}" added to official_credit_union_domains.json. Site score and status updated.`,
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
