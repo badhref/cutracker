@@ -5,6 +5,7 @@ const path    = require('path');
 const fs      = require('fs');
 const {
   getBreaches, getBreach, upsertBreach, deleteBreach, getStats, getFetchLog,
+  getSetting, setSetting, getSettings,
   initSitesSchema, upsertSite, getSites, getSite, deleteSite,
   updateSiteScore, updateSiteStatus, updateSiteAnalysis,
   addSiteEvidence, getSiteEvidence, addAiAnalysis, getAiAnalysis,
@@ -90,6 +91,51 @@ app.delete('/api/breaches/:id', (req, res) => {
   try {
     deleteBreach(parseInt(req.params.id));
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── App Settings ──────────────────────────────────────────────────────────────
+
+const SETTING_DEFAULTS = {
+  breach_types: [
+    'Ransomware', 'Phishing', 'Unauthorized Access/Hacking', 'Malware',
+    'Insider Threat', 'Third-Party/Vendor', 'Accidental Exposure',
+    'Theft', 'Social Engineering', 'SQL Injection', 'Data Breach',
+  ],
+  attack_vectors: [
+    'Email/Phishing', 'Web Application', 'Remote Access',
+    'Third-Party', 'Physical', 'Insider', 'Social Engineering',
+  ],
+  data_types: [
+    'SSN', "Driver's License", 'Full Name', 'Address', 'Date of Birth',
+    'Email', 'Phone Number', 'Account Number', 'Payment Card',
+    'Credentials', 'Health Information', 'Loan Information',
+  ],
+};
+
+const ALLOWED_SETTING_KEYS = new Set(Object.keys(SETTING_DEFAULTS));
+
+app.get('/api/settings', (req, res) => {
+  try {
+    const stored = getSettings();
+    const data = { ...SETTING_DEFAULTS, ...stored };
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/settings', (req, res) => {
+  try {
+    for (const [key, value] of Object.entries(req.body)) {
+      if (!ALLOWED_SETTING_KEYS.has(key)) continue;
+      if (!Array.isArray(value)) continue;
+      setSetting(key, value.map(v => String(v).trim()).filter(Boolean));
+    }
+    const stored = getSettings();
+    res.json({ success: true, data: { ...SETTING_DEFAULTS, ...stored } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -18,6 +18,12 @@ function getDb() {
 
 function initSchema() {
   getDb().exec(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS breaches (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       external_id TEXT UNIQUE,
@@ -564,8 +570,31 @@ function getSiteStats() {
   return { total, high, suspicious, unverified, watch, known_legitimate, newToday, byStatus, bySource };
 }
 
+// ── App Settings ───────────────────────────────────────────────────────────────
+
+function getSetting(key) {
+  const row = getDb().prepare('SELECT value FROM app_settings WHERE key = ?').get(key);
+  return row ? JSON.parse(row.value) : null;
+}
+
+function setSetting(key, value) {
+  getDb().prepare(`
+    INSERT INTO app_settings (key, value, updated_at)
+    VALUES (?, ?, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `).run(key, JSON.stringify(value));
+}
+
+function getSettings() {
+  const rows = getDb().prepare('SELECT key, value FROM app_settings').all();
+  const out = {};
+  for (const r of rows) out[r.key] = JSON.parse(r.value);
+  return out;
+}
+
 module.exports = {
   getDb, upsertBreach, getBreaches, getBreach, deleteBreach, getStats, logFetch, getFetchLog,
+  getSetting, setSetting, getSettings,
   initSitesSchema, upsertSite, getSites, getSite, deleteSite,
   updateSiteScore, updateSiteStatus, updateSiteAnalysis,
   addSiteEvidence, getSiteEvidence, addAiAnalysis, getAiAnalysis,

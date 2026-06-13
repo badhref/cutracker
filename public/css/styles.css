@@ -1296,6 +1296,102 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   .ss-audit-entry { grid-template-columns: 1fr; }
 }
 
+/* ── Settings Page ───────────────────────────────────────────────────────────── */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.settings-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.settings-card-header {
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.settings-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.settings-card-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.settings-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 40px;
+  margin-bottom: 14px;
+}
+
+.settings-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  border: 1px solid transparent;
+  transition: var(--transition);
+}
+
+.settings-list-item:hover {
+  border-color: var(--border);
+}
+
+.settings-item-label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.settings-item-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius);
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.settings-item-delete:hover {
+  background: var(--danger-subtle);
+  color: var(--danger);
+}
+
+.settings-add-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-add-row .form-control {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ── Impact Edit (breach detail modal) ──────────────────────────────────────── */
 .impact-edit-section {
   margin-top: 20px;

@@ -6,18 +6,35 @@ let sortDir = 'desc';
 let charts = {};
 let editingId = null;
 
-// Impact-edit state (for the inline edit section inside the detail modal)
-let _detailBreach   = null;   // current breach shown in detail modal
-let _dtSelected     = new Set(); // currently selected data-type chips
+// Detail modal state
+let _detailBreach    = null;   // breach currently open in detail modal
 
-const PRESET_DATA_TYPES = [
-  'SSN', "Driver's License", 'Full Name', 'Address', 'Date of Birth',
-  'Email', 'Phone Number', 'Account Number', 'Payment Card',
-  'Credentials', 'Health Information', 'Loan Information',
-];
+// Edit-mode chip sets (populated when "Edit All Fields" is clicked)
+let _editBreachTypes   = new Set();
+let _editAttackVectors = new Set();
+let _editDataTypes     = new Set();
+
+// App settings (loaded from /api/settings on init; defaults used if fetch fails)
+let _settings = {
+  breach_types: [
+    'Ransomware', 'Phishing', 'Unauthorized Access/Hacking', 'Malware',
+    'Insider Threat', 'Third-Party/Vendor', 'Accidental Exposure',
+    'Theft', 'Social Engineering', 'SQL Injection', 'Data Breach',
+  ],
+  attack_vectors: [
+    'Email/Phishing', 'Web Application', 'Remote Access',
+    'Third-Party', 'Physical', 'Insider', 'Social Engineering',
+  ],
+  data_types: [
+    'SSN', "Driver's License", 'Full Name', 'Address', 'Date of Birth',
+    'Email', 'Phone Number', 'Account Number', 'Payment Card',
+    'Credentials', 'Health Information', 'Loan Information',
+  ],
+};
 
 /* ── Init ───────────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
+  loadSettings();   // fire-and-forget; used lazily in detail/edit modals
   setupNav();
   setupButtons();
   loadDashboard();
@@ -34,8 +51,9 @@ function setupNav() {
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
       document.getElementById(`view-${view}`).classList.add('active');
       if (view === 'analytics') loadAnalytics();
-      if (view === 'sources') loadSources();
+      if (view === 'sources')   loadSources();
       if (view === 'fetch-log') loadFetchLog();
+      if (view === 'settings')  loadSettingsPage();
       if (view === 'sites' && window.sitesDashboard) window.sitesDashboard.load();
     });
   });
@@ -428,105 +446,21 @@ function renderBreachTable() {
   `).join('');
 }
 
-/* ── Detail Modal ───────────────────────────────────────────────────────────── */
+/* ── Detail Modal — View mode ────────────────────────────────────────────────── */
 async function openDetail(id) {
   const { data: b } = await api('GET', `/api/breaches/${id}`);
   if (!b) return;
-
   _detailBreach = b;
 
   document.getElementById('detail-title').textContent = b.organization;
+  document.getElementById('detail-body').innerHTML = renderDetailViewBody(b);
 
-  const sev = getSeverity(b);
-  document.getElementById('detail-body').innerHTML = `
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px">
-      ${breachTypeBadge(b.breach_type)}
-      ${sourceBadge(b.source)}
-      <span class="badge badge-default" style="margin-left:auto">${sev.label}</span>
-      <span class="severity-dot severity-${sev.level}"></span>
-    </div>
-    <div class="detail-grid">
-      <div class="detail-field">
-        <div class="detail-label">Organization</div>
-        <div class="detail-value">${esc(b.organization)}</div>
-      </div>
-      <div class="detail-field">
-        <div class="detail-label">State</div>
-        <div class="detail-value">${b.state || '—'}</div>
-      </div>
-      <div class="detail-field">
-        <div class="detail-label">Breach Date</div>
-        <div class="detail-value">${b.breach_date || '—'}</div>
-      </div>
-      <div class="detail-field">
-        <div class="detail-label">Discovery Date</div>
-        <div class="detail-value">${b.discovery_date || '—'}</div>
-      </div>
-      <div class="detail-field">
-        <div class="detail-label">Notification Date</div>
-        <div class="detail-value">${b.notification_date || '—'}</div>
-      </div>
-      <div class="detail-field">
-        <div class="detail-label">Status</div>
-        <div class="detail-value"><span class="status-${(b.status||'').toLowerCase()}">${b.status || '—'}</span></div>
-      </div>
-      <div class="detail-field">
-        <div class="detail-label">Breach Type</div>
-        <div class="detail-value">${b.breach_type || '—'}</div>
-      </div>
-      <div class="detail-field">
-        <div class="detail-label">Attack Vector</div>
-        <div class="detail-value">${b.attack_vector || '—'}</div>
-      </div>
-      <div class="detail-field">
-        <div class="detail-label" style="display:flex;align-items:center;gap:8px">
-          Records Affected
-          <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="openImpactEdit()">Edit</button>
-        </div>
-        <div class="detail-value" id="detail-records-view" style="font-size:20px;font-weight:700;color:var(--danger)">${b.records_affected ? b.records_affected.toLocaleString() : 'Unknown'}</div>
-      </div>
-      <div class="detail-field">
-        <div class="detail-label">Source</div>
-        <div class="detail-value">${b.source_url
-          ? `<a href="${esc(b.source_url)}" target="_blank" rel="noopener">${esc(b.source)}</a>`
-          : esc(b.source)}</div>
-      </div>
-      <div class="detail-field full">
-        <div class="detail-label" style="display:flex;align-items:center;gap:8px">
-          Data Types Compromised
-          <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="openImpactEdit()">Edit</button>
-        </div>
-        <div class="detail-value" id="detail-datatypes-view">${b.data_types ? renderDataTypePills(b.data_types) : '<span style="color:var(--text-dim)">None recorded — click Edit to add</span>'}</div>
-      </div>
-      <div class="detail-field full">
-        <div class="detail-label">Description</div>
-        <div class="detail-value" style="color:var(--text-muted);line-height:1.6">${b.description ? esc(b.description) : '—'}</div>
-      </div>
-    </div>
-
-    <!-- ── Impact Edit Section (hidden until Edit is clicked) ───────────────── -->
-    <div id="impact-edit-section" class="impact-edit-section hidden">
-      <h4>Edit Impact Data</h4>
-
-      <label class="form-label">Records Affected</label>
-      <input id="impact-records-input" class="form-control" type="number" min="0"
-             placeholder="e.g. 50000" value="${b.records_affected || ''}"
-             style="max-width:220px">
-
-      <label class="form-label" style="margin-top:16px">Data Types Compromised</label>
-      <div class="dt-chips-grid" id="dt-chips-grid"></div>
-
-      <label class="form-label" style="font-size:11px;color:var(--text-dim);text-transform:none;letter-spacing:0">Other (comma-separated)</label>
-      <input id="impact-dt-custom" class="form-control" type="text"
-             placeholder="e.g. Passport, Tax ID" style="max-width:360px">
-
-      <div class="impact-edit-actions">
-        <button class="btn btn-primary btn-sm" onclick="saveImpact()">Save Changes</button>
-        <button class="btn btn-secondary btn-sm" onclick="closeImpactEdit()">Cancel</button>
-      </div>
-    </div>
-  `;
-
+  // Footer buttons
+  const editBtn = document.getElementById('detail-edit-btn');
+  if (editBtn) {
+    editBtn.classList.remove('hidden');
+    editBtn.onclick = () => openDetailEdit();
+  }
   document.getElementById('detail-delete').onclick = async () => {
     if (!confirm(`Delete breach record for "${b.organization}"?`)) return;
     await api('DELETE', `/api/breaches/${id}`);
@@ -539,73 +473,234 @@ async function openDetail(id) {
   openModal('detail-modal');
 }
 
-/* ── Impact Edit helpers ─────────────────────────────────────────────────────── */
-function openImpactEdit() {
+function renderDetailViewBody(b) {
+  return `
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:20px">
+      ${breachTypeBadge(b.breach_type)}
+      ${sourceBadge(b.source)}
+    </div>
+    <div class="detail-grid">
+      <div class="detail-field">
+        <div class="detail-label">Organization</div>
+        <div class="detail-value">${esc(b.organization)}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">State</div>
+        <div class="detail-value">${b.state || '—'}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Breach Date</div>
+        <div class="detail-value" style="font-family:var(--font-mono)">${b.breach_date || '—'}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Discovery Date</div>
+        <div class="detail-value" style="font-family:var(--font-mono)">${b.discovery_date || '—'}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Notification Date</div>
+        <div class="detail-value" style="font-family:var(--font-mono)">${b.notification_date || '—'}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Status</div>
+        <div class="detail-value"><span class="status-${(b.status||'').toLowerCase().replace(/\s+/g,'-')}">${b.status || '—'}</span></div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Breach Type</div>
+        <div class="detail-value">${b.breach_type ? renderMultiPills(b.breach_type) : '—'}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Attack Vector</div>
+        <div class="detail-value">${b.attack_vector ? renderMultiPills(b.attack_vector) : '—'}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Records Affected</div>
+        <div class="detail-value" style="font-size:20px;font-weight:700;color:var(--danger)">${b.records_affected ? b.records_affected.toLocaleString() : '—'}</div>
+      </div>
+      <div class="detail-field">
+        <div class="detail-label">Source</div>
+        <div class="detail-value">${b.source_url
+          ? `<a href="${esc(b.source_url)}" target="_blank" rel="noopener">${esc(b.source || b.source_url)}</a>`
+          : esc(b.source || '—')}</div>
+      </div>
+      <div class="detail-field full">
+        <div class="detail-label">Data Types Compromised</div>
+        <div class="detail-value">${b.data_types ? renderDataTypePills(b.data_types) : '<span style="color:var(--text-dim)">None recorded</span>'}</div>
+      </div>
+      <div class="detail-field full">
+        <div class="detail-label">Description</div>
+        <div class="detail-value" style="color:var(--text-muted);line-height:1.6">${b.description ? esc(b.description) : '—'}</div>
+      </div>
+    </div>
+  `;
+}
+
+/* ── Detail Modal — Edit mode ────────────────────────────────────────────────── */
+function openDetailEdit() {
   if (!_detailBreach) return;
+  const b = _detailBreach;
 
-  // Seed _dtSelected from the current data_types string
-  _dtSelected = new Set(
-    (_detailBreach.data_types || '').split(',').map(t => t.trim()).filter(Boolean)
-  );
+  // Seed chip sets from current values (comma-separated strings → Sets)
+  const parseSet = str => new Set((str || '').split(',').map(t => t.trim()).filter(Boolean));
+  _editBreachTypes   = parseSet(b.breach_type);
+  _editAttackVectors = parseSet(b.attack_vector);
+  _editDataTypes     = parseSet(b.data_types);
 
-  renderDtChips();
+  document.getElementById('detail-edit-btn')?.classList.add('hidden');
+  document.getElementById('detail-body').innerHTML = renderDetailEditBody(b);
 
-  document.getElementById('impact-edit-section').classList.remove('hidden');
-  document.getElementById('impact-records-input')?.focus();
+  // Render chip grids after the HTML is in the DOM
+  renderEditChips('breach_type');
+  renderEditChips('attack_vector');
+  renderEditChips('data_type');
 }
 
-function closeImpactEdit() {
-  document.getElementById('impact-edit-section')?.classList.add('hidden');
+function closeDetailEdit() {
+  if (!_detailBreach) return;
+  document.getElementById('detail-body').innerHTML = renderDetailViewBody(_detailBreach);
+  const editBtn = document.getElementById('detail-edit-btn');
+  if (editBtn) { editBtn.classList.remove('hidden'); editBtn.onclick = () => openDetailEdit(); }
 }
 
-function renderDtChips() {
-  const grid = document.getElementById('dt-chips-grid');
-  if (!grid) return;
+function renderDetailEditBody(b) {
+  const states = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID',
+    'IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT',
+    'NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
+    'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
 
-  // Preset chips
-  const presetHtml = PRESET_DATA_TYPES.map(t => {
-    const active = _dtSelected.has(t);
-    return `<button class="dt-chip${active ? ' active' : ''}" onclick="toggleDtChip(${JSON.stringify(t)})">${esc(t)}</button>`;
-  }).join('');
+  const stateOpts = `<option value="">—</option>` +
+    states.map(s => `<option${b.state===s?' selected':''}>${s}</option>`).join('');
 
-  // Any non-preset types already on the record (show them as removable active chips)
-  const extras = [..._dtSelected].filter(t => !PRESET_DATA_TYPES.includes(t));
-  const extraHtml = extras.map(t =>
-    `<button class="dt-chip active" onclick="toggleDtChip(${JSON.stringify(t)})" title="Click to remove">${esc(t)} ×</button>`
+  const statusOpts = ['active','reported','resolved','under investigation'].map(s =>
+    `<option value="${s}"${b.status===s?' selected':''}>${s.charAt(0).toUpperCase()+s.slice(1)}</option>`
   ).join('');
 
-  grid.innerHTML = presetHtml + (extraHtml ? `<span style="width:100%;height:0"></span>${extraHtml}` : '');
+  return `
+    <div class="detail-grid">
+      <div class="detail-field full">
+        <label class="form-label">Organization *</label>
+        <input class="form-control" id="edit-organization" value="${esc(b.organization || '')}">
+      </div>
+      <div class="detail-field">
+        <label class="form-label">State</label>
+        <select class="form-control" id="edit-state">${stateOpts}</select>
+      </div>
+      <div class="detail-field">
+        <label class="form-label">Status</label>
+        <select class="form-control" id="edit-status">${statusOpts}</select>
+      </div>
+      <div class="detail-field">
+        <label class="form-label">Breach Date</label>
+        <input class="form-control" type="date" id="edit-breach-date" value="${b.breach_date || ''}">
+      </div>
+      <div class="detail-field">
+        <label class="form-label">Discovery Date</label>
+        <input class="form-control" type="date" id="edit-discovery-date" value="${b.discovery_date || ''}">
+      </div>
+      <div class="detail-field">
+        <label class="form-label">Notification Date</label>
+        <input class="form-control" type="date" id="edit-notification-date" value="${b.notification_date || ''}">
+      </div>
+      <div class="detail-field">
+        <label class="form-label">Records Affected</label>
+        <input class="form-control" type="number" min="0" id="edit-records" value="${b.records_affected || ''}">
+      </div>
+      <div class="detail-field">
+        <label class="form-label">Source</label>
+        <input class="form-control" id="edit-source" value="${esc(b.source || '')}">
+      </div>
+      <div class="detail-field full">
+        <label class="form-label">Source URL</label>
+        <input class="form-control" type="url" id="edit-source-url" value="${esc(b.source_url || '')}">
+      </div>
+      <div class="detail-field full">
+        <label class="form-label">Breach Type <span style="font-weight:400;color:var(--text-dim)">(select all that apply)</span></label>
+        <div class="dt-chips-grid" id="chips-breach_type"></div>
+      </div>
+      <div class="detail-field full">
+        <label class="form-label">Attack Vector <span style="font-weight:400;color:var(--text-dim)">(select all that apply)</span></label>
+        <div class="dt-chips-grid" id="chips-attack_vector"></div>
+      </div>
+      <div class="detail-field full">
+        <label class="form-label">Data Types Compromised <span style="font-weight:400;color:var(--text-dim)">(select all that apply)</span></label>
+        <div class="dt-chips-grid" id="chips-data_type"></div>
+        <input class="form-control" id="edit-dt-custom" placeholder="Other types (comma-separated)" style="margin-top:8px">
+      </div>
+      <div class="detail-field full">
+        <label class="form-label">Description</label>
+        <textarea class="form-control" id="edit-description" rows="4">${esc(b.description || '')}</textarea>
+      </div>
+    </div>
+    <div class="impact-edit-actions">
+      <button class="btn btn-primary" onclick="saveDetailEdit()">Save Changes</button>
+      <button class="btn btn-secondary" onclick="closeDetailEdit()">Cancel</button>
+    </div>
+  `;
 }
 
-function toggleDtChip(type) {
-  if (_dtSelected.has(type)) {
-    _dtSelected.delete(type);
-  } else {
-    _dtSelected.add(type);
-  }
-  renderDtChips();
+// field: 'breach_type' | 'attack_vector' | 'data_type'
+function renderEditChips(field) {
+  const grid = document.getElementById(`chips-${field}`);
+  if (!grid) return;
+
+  const list = field === 'breach_type'   ? _settings.breach_types
+             : field === 'attack_vector' ? _settings.attack_vectors
+             :                             _settings.data_types;
+  const set  = field === 'breach_type'   ? _editBreachTypes
+             : field === 'attack_vector' ? _editAttackVectors
+             :                             _editDataTypes;
+
+  const presetHtml = list.map(t =>
+    `<button class="dt-chip${set.has(t)?' active':''}" onclick="toggleEditChip(${JSON.stringify(field)},${JSON.stringify(t)})">${esc(t)}</button>`
+  ).join('');
+
+  // Extra chips for values on this record that aren't in the current settings list
+  const extraHtml = [...set].filter(t => !list.includes(t)).map(t =>
+    `<button class="dt-chip active" onclick="toggleEditChip(${JSON.stringify(field)},${JSON.stringify(t)})" title="Click to remove">${esc(t)} ×</button>`
+  ).join('');
+
+  grid.innerHTML = presetHtml + extraHtml;
 }
 
-async function saveImpact() {
+function toggleEditChip(field, value) {
+  const set = field === 'breach_type'   ? _editBreachTypes
+            : field === 'attack_vector' ? _editAttackVectors
+            :                             _editDataTypes;
+  if (set.has(value)) set.delete(value); else set.add(value);
+  renderEditChips(field);
+}
+
+async function saveDetailEdit() {
   if (!_detailBreach) return;
 
-  const recordsRaw = document.getElementById('impact-records-input')?.value;
-  const customRaw  = document.getElementById('impact-dt-custom')?.value || '';
+  const org = document.getElementById('edit-organization')?.value.trim();
+  if (!org) { showToast('Organization name is required', 'error'); return; }
 
-  // Merge custom types into selection set
-  customRaw.split(',').map(t => t.trim()).filter(Boolean).forEach(t => _dtSelected.add(t));
+  // Merge any free-text data-type input
+  const customDt = document.getElementById('edit-dt-custom')?.value || '';
+  customDt.split(',').map(t => t.trim()).filter(Boolean).forEach(t => _editDataTypes.add(t));
+
+  const val = id => document.getElementById(id)?.value || null;
 
   const payload = {
-    records_affected: recordsRaw ? parseInt(recordsRaw, 10) : null,
-    data_types:       _dtSelected.size ? [..._dtSelected].join(', ') : null,
+    organization:      org,
+    state:             val('edit-state')             || null,
+    status:            val('edit-status')            || 'reported',
+    breach_date:       val('edit-breach-date')       || null,
+    discovery_date:    val('edit-discovery-date')    || null,
+    notification_date: val('edit-notification-date') || null,
+    records_affected:  val('edit-records') ? parseInt(val('edit-records'), 10) : null,
+    source:            val('edit-source')            || null,
+    source_url:        val('edit-source-url')        || null,
+    breach_type:       _editBreachTypes.size   ? [..._editBreachTypes].join(', ')   : null,
+    attack_vector:     _editAttackVectors.size ? [..._editAttackVectors].join(', ') : null,
+    data_types:        _editDataTypes.size     ? [..._editDataTypes].join(', ')     : null,
+    description:       val('edit-description') || null,
   };
 
   try {
     await api('PUT', `/api/breaches/${_detailBreach.id}`, payload);
-    showToast('Impact data saved', 'success');
-    // Refresh the detail view with updated data
-    closeImpactEdit();
-    await openDetail(_detailBreach.id);
+    showToast('Breach updated', 'success');
+    await openDetail(_detailBreach.id);   // re-render in view mode
     loadDashboard();
     loadBreaches();
   } catch (e) {
@@ -908,6 +1003,7 @@ function exportCSV() {
 }
 
 /* ── Helpers ─────────────────────────────────────────────────────────────────── */
+// Renders one badge per comma-separated type value
 function breachTypeBadge(type) {
   if (!type) return '<span class="badge badge-default">Unknown</span>';
   const cls = {
@@ -920,8 +1016,18 @@ function breachTypeBadge(type) {
     'Accidental Exposure': 'accidental',
     'Data Breach': 'default',
   };
-  const c = cls[type] || 'default';
-  return `<span class="badge badge-${c}">${esc(type)}</span>`;
+  return type.split(',').map(t => {
+    const t2 = t.trim();
+    return `<span class="badge badge-${cls[t2] || 'default'}">${esc(t2)}</span>`;
+  }).join(' ');
+}
+
+// Renders comma-separated values as plain grey pills (for attack_vector etc.)
+function renderMultiPills(str) {
+  if (!str) return '—';
+  return str.split(',').map(t =>
+    `<span class="badge badge-default" style="margin:2px">${esc(t.trim())}</span>`
+  ).join('');
 }
 
 function sourceBadge(source) {
@@ -935,14 +1041,6 @@ function sourceBadge(source) {
   return `<span class="badge badge-source-${key}">${esc(source)}</span>`;
 }
 
-function getSeverity(b) {
-  const r = b.records_affected || 0;
-  const t = b.breach_type || '';
-  if (r > 100000 || t === 'Ransomware') return { level: 'critical', label: 'Critical' };
-  if (r > 10000  || t === 'Unauthorized Access/Hacking') return { level: 'high', label: 'High' };
-  if (r > 1000   || t === 'Phishing') return { level: 'medium', label: 'Medium' };
-  return { level: 'low', label: 'Low' };
-}
 
 function formatLargeNum(n) {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -978,6 +1076,98 @@ document.querySelectorAll('.modal-backdrop').forEach(el => {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') document.querySelectorAll('.modal-backdrop:not(.hidden)').forEach(m => m.classList.add('hidden'));
 });
+
+/* ── Settings ────────────────────────────────────────────────────────────────── */
+async function loadSettings() {
+  try {
+    const { data } = await api('GET', '/api/settings');
+    if (data) _settings = data;
+  } catch (e) {
+    // silently use defaults
+  }
+}
+
+async function loadSettingsPage() {
+  await loadSettings();
+  renderSettingsPage();
+}
+
+function renderSettingsPage() {
+  const el = document.getElementById('view-settings');
+  if (!el) return;
+
+  el.innerHTML = `
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Settings</h1>
+        <p class="page-subtitle">Manage lookup lists used across the application</p>
+      </div>
+    </div>
+    <div class="settings-grid">
+      ${renderSettingsCard('breach_types',   'Breach Types',   'Tag breaches with one or more types')}
+      ${renderSettingsCard('attack_vectors', 'Attack Vectors', 'Methods of attack')}
+      ${renderSettingsCard('data_types',     'Data Types',     'Types of data compromised')}
+    </div>
+  `;
+}
+
+function renderSettingsCard(key, title, subtitle) {
+  const items = _settings[key] || [];
+  return `
+    <div class="settings-card">
+      <div class="settings-card-header">
+        <div class="settings-card-title">${title}</div>
+        <div class="settings-card-sub">${subtitle}</div>
+      </div>
+      <div class="settings-list" id="settings-list-${key}">
+        ${items.length ? items.map((item, i) => `
+          <div class="settings-list-item">
+            <span class="settings-item-label">${esc(item)}</span>
+            <button class="settings-item-delete" onclick="removeSettingItem(${JSON.stringify(key)}, ${i})" title="Remove">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px;height:13px"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        `).join('') : `<div style="color:var(--text-dim);font-size:12px;padding:6px 0">No items — add one below.</div>`}
+      </div>
+      <div class="settings-add-row">
+        <input class="form-control" id="settings-add-${key}"
+               placeholder="Add new…"
+               onkeydown="if(event.key==='Enter')addSettingItem(${JSON.stringify(key)})">
+        <button class="btn btn-primary btn-sm" onclick="addSettingItem(${JSON.stringify(key)})">Add</button>
+      </div>
+    </div>
+  `;
+}
+
+function addSettingItem(key) {
+  const input = document.getElementById(`settings-add-${key}`);
+  const val = input?.value.trim();
+  if (!val) return;
+  if (!(_settings[key] || []).includes(val)) {
+    _settings[key] = [...(_settings[key] || []), val];
+    persistSetting(key);
+  }
+  if (input) input.value = '';
+  renderSettingsPage();
+  // Re-focus the input for rapid entry
+  setTimeout(() => document.getElementById(`settings-add-${key}`)?.focus(), 50);
+}
+
+function removeSettingItem(key, index) {
+  if (!confirm(`Remove "${_settings[key][index]}"?`)) return;
+  _settings[key] = _settings[key].filter((_, i) => i !== index);
+  persistSetting(key);
+  renderSettingsPage();
+}
+
+async function persistSetting(key) {
+  try {
+    await api('PUT', '/api/settings', { [key]: _settings[key] });
+    showToast(`${key.replace(/_/g,' ')} saved`, 'success');
+  } catch (e) {
+    showToast('Failed to save setting', 'error');
+  }
+}
 
 /* ── Toast ───────────────────────────────────────────────────────────────────── */
 function showToast(message, type = 'info') {
