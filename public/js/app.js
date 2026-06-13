@@ -649,16 +649,24 @@ function renderEditChips(field) {
              : field === 'attack_vector' ? _editAttackVectors
              :                             _editDataTypes;
 
+  // Use data attributes instead of inline onclick — avoids double-quote
+  // collisions between the HTML attribute and JSON.stringify output.
   const presetHtml = list.map(t =>
-    `<button class="dt-chip${set.has(t)?' active':''}" onclick="toggleEditChip(${JSON.stringify(field)},${JSON.stringify(t)})">${esc(t)}</button>`
+    `<button class="dt-chip${set.has(t) ? ' active' : ''}" data-field="${field}" data-value="${esc(t)}">${esc(t)}</button>`
   ).join('');
 
-  // Extra chips for values on this record that aren't in the current settings list
+  // Extra chips for values on this record not in the current settings list
   const extraHtml = [...set].filter(t => !list.includes(t)).map(t =>
-    `<button class="dt-chip active" onclick="toggleEditChip(${JSON.stringify(field)},${JSON.stringify(t)})" title="Click to remove">${esc(t)} ×</button>`
+    `<button class="dt-chip active" data-field="${field}" data-value="${esc(t)}" title="Click to remove">${esc(t)} ×</button>`
   ).join('');
 
   grid.innerHTML = presetHtml + extraHtml;
+
+  // Attach a single delegated listener each time chips are re-rendered
+  grid.onclick = e => {
+    const btn = e.target.closest('.dt-chip');
+    if (btn) toggleEditChip(btn.dataset.field, btn.dataset.value);
+  };
 }
 
 function toggleEditChip(field, value) {
@@ -1123,7 +1131,7 @@ function renderSettingsCard(key, title, subtitle) {
         ${items.length ? items.map((item, i) => `
           <div class="settings-list-item">
             <span class="settings-item-label">${esc(item)}</span>
-            <button class="settings-item-delete" onclick="removeSettingItem(${JSON.stringify(key)}, ${i})" title="Remove">
+            <button class="settings-item-delete" onclick="removeSettingItem('${key}', ${i})" title="Remove">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:13px;height:13px"><path d="M18 6 6 18M6 6l12 12"/></svg>
             </button>
           </div>
@@ -1132,8 +1140,8 @@ function renderSettingsCard(key, title, subtitle) {
       <div class="settings-add-row">
         <input class="form-control" id="settings-add-${key}"
                placeholder="Add new…"
-               onkeydown="if(event.key==='Enter')addSettingItem(${JSON.stringify(key)})">
-        <button class="btn btn-primary btn-sm" onclick="addSettingItem(${JSON.stringify(key)})">Add</button>
+               onkeydown="if(event.key==='Enter')addSettingItem('${key}')">
+        <button class="btn btn-primary btn-sm" onclick="addSettingItem('${key}')">Add</button>
       </div>
     </div>
   `;
