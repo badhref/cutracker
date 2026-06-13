@@ -4,21 +4,15 @@
  */
 
 const { upsertBreach, logFetch } = require('../db');
-const { fetchHHS, SOURCE: HHS_SOURCE } = require('./hhs');
 const { fetchMaineAG, SOURCE: MAINE_SOURCE } = require('./maine-ag');
 const { fetchCaliforniaAG, SOURCE: CA_SOURCE } = require('./california-ag');
-const { fetchDataBreachRSS } = require('./databreach-rss');
-const { fetchNCUA, SOURCE: NCUA_SOURCE } = require('./ncua');
-const { fetchITRC, SOURCE: ITRC_SOURCE } = require('./itrc');
 const { seedDemoData } = require('./demo-seed');
 
+// Only attorney general breach notification portals are active fetchers.
+// HHS, NCUA, ITRC, and RSS feeds have been removed from the active registry.
 const FETCHERS = [
-  { name: HHS_SOURCE, fn: fetchHHS },
   { name: MAINE_SOURCE, fn: fetchMaineAG },
   { name: CA_SOURCE, fn: fetchCaliforniaAG },
-  { name: 'RSS Feeds', fn: fetchDataBreachRSS },
-  { name: NCUA_SOURCE, fn: fetchNCUA },
-  { name: ITRC_SOURCE, fn: fetchITRC },
 ];
 
 async function runFetcher(fetcher) {

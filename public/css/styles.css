@@ -1296,4 +1296,84 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   .ss-audit-entry { grid-template-columns: 1fr; }
 }
 
+/* ── Impact Edit (breach detail modal) ──────────────────────────────────────── */
+.impact-edit-section {
+  margin-top: 20px;
+  padding: 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.impact-edit-section h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-bottom: 16px;
+}
+
+.impact-edit-section .form-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  display: block;
+  margin-bottom: 8px;
+  margin-top: 16px;
+}
+
+.impact-edit-section .form-label:first-of-type { margin-top: 0; }
+
+.dt-chips-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.dt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+  line-height: 1.2;
+}
+
+.dt-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent-hover);
+  background: var(--accent-subtle);
+}
+
+.dt-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  color: var(--accent-hover);
+  font-weight: 600;
+}
+
+.dt-chip.active::before {
+  content: '✓ ';
+  font-size: 10px;
+}
+
+.impact-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-muted);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════════ */

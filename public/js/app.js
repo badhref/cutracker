@@ -6,6 +6,16 @@ let sortDir = 'desc';
 let charts = {};
 let editingId = null;
 
+// Impact-edit state (for the inline edit section inside the detail modal)
+let _detailBreach   = null;   // current breach shown in detail modal
+let _dtSelected     = new Set(); // currently selected data-type chips
+
+const PRESET_DATA_TYPES = [
+  'SSN', "Driver's License", 'Full Name', 'Address', 'Date of Birth',
+  'Email', 'Phone Number', 'Account Number', 'Payment Card',
+  'Credentials', 'Health Information', 'Loan Information',
+];
+
 /* ── Init ───────────────────────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
   setupNav();
@@ -423,6 +433,8 @@ async function openDetail(id) {
   const { data: b } = await api('GET', `/api/breaches/${id}`);
   if (!b) return;
 
+  _detailBreach = b;
+
   document.getElementById('detail-title').textContent = b.organization;
 
   const sev = getSeverity(b);
@@ -467,8 +479,11 @@ async function openDetail(id) {
         <div class="detail-value">${b.attack_vector || '—'}</div>
       </div>
       <div class="detail-field">
-        <div class="detail-label">Records Affected</div>
-        <div class="detail-value" style="font-size:20px;font-weight:700;color:var(--danger)">${b.records_affected ? b.records_affected.toLocaleString() : 'Unknown'}</div>
+        <div class="detail-label" style="display:flex;align-items:center;gap:8px">
+          Records Affected
+          <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="openImpactEdit()">Edit</button>
+        </div>
+        <div class="detail-value" id="detail-records-view" style="font-size:20px;font-weight:700;color:var(--danger)">${b.records_affected ? b.records_affected.toLocaleString() : 'Unknown'}</div>
       </div>
       <div class="detail-field">
         <div class="detail-label">Source</div>
@@ -477,12 +492,37 @@ async function openDetail(id) {
           : esc(b.source)}</div>
       </div>
       <div class="detail-field full">
-        <div class="detail-label">Data Types Compromised</div>
-        <div class="detail-value">${b.data_types ? renderDataTypePills(b.data_types) : '—'}</div>
+        <div class="detail-label" style="display:flex;align-items:center;gap:8px">
+          Data Types Compromised
+          <button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 8px" onclick="openImpactEdit()">Edit</button>
+        </div>
+        <div class="detail-value" id="detail-datatypes-view">${b.data_types ? renderDataTypePills(b.data_types) : '<span style="color:var(--text-dim)">None recorded — click Edit to add</span>'}</div>
       </div>
       <div class="detail-field full">
         <div class="detail-label">Description</div>
         <div class="detail-value" style="color:var(--text-muted);line-height:1.6">${b.description ? esc(b.description) : '—'}</div>
+      </div>
+    </div>
+
+    <!-- ── Impact Edit Section (hidden until Edit is clicked) ───────────────── -->
+    <div id="impact-edit-section" class="impact-edit-section hidden">
+      <h4>Edit Impact Data</h4>
+
+      <label class="form-label">Records Affected</label>
+      <input id="impact-records-input" class="form-control" type="number" min="0"
+             placeholder="e.g. 50000" value="${b.records_affected || ''}"
+             style="max-width:220px">
+
+      <label class="form-label" style="margin-top:16px">Data Types Compromised</label>
+      <div class="dt-chips-grid" id="dt-chips-grid"></div>
+
+      <label class="form-label" style="font-size:11px;color:var(--text-dim);text-transform:none;letter-spacing:0">Other (comma-separated)</label>
+      <input id="impact-dt-custom" class="form-control" type="text"
+             placeholder="e.g. Passport, Tax ID" style="max-width:360px">
+
+      <div class="impact-edit-actions">
+        <button class="btn btn-primary btn-sm" onclick="saveImpact()">Save Changes</button>
+        <button class="btn btn-secondary btn-sm" onclick="closeImpactEdit()">Cancel</button>
       </div>
     </div>
   `;
@@ -497,6 +537,80 @@ async function openDetail(id) {
   };
 
   openModal('detail-modal');
+}
+
+/* ── Impact Edit helpers ─────────────────────────────────────────────────────── */
+function openImpactEdit() {
+  if (!_detailBreach) return;
+
+  // Seed _dtSelected from the current data_types string
+  _dtSelected = new Set(
+    (_detailBreach.data_types || '').split(',').map(t => t.trim()).filter(Boolean)
+  );
+
+  renderDtChips();
+
+  document.getElementById('impact-edit-section').classList.remove('hidden');
+  document.getElementById('impact-records-input')?.focus();
+}
+
+function closeImpactEdit() {
+  document.getElementById('impact-edit-section')?.classList.add('hidden');
+}
+
+function renderDtChips() {
+  const grid = document.getElementById('dt-chips-grid');
+  if (!grid) return;
+
+  // Preset chips
+  const presetHtml = PRESET_DATA_TYPES.map(t => {
+    const active = _dtSelected.has(t);
+    return `<button class="dt-chip${active ? ' active' : ''}" onclick="toggleDtChip(${JSON.stringify(t)})">${esc(t)}</button>`;
+  }).join('');
+
+  // Any non-preset types already on the record (show them as removable active chips)
+  const extras = [..._dtSelected].filter(t => !PRESET_DATA_TYPES.includes(t));
+  const extraHtml = extras.map(t =>
+    `<button class="dt-chip active" onclick="toggleDtChip(${JSON.stringify(t)})" title="Click to remove">${esc(t)} ×</button>`
+  ).join('');
+
+  grid.innerHTML = presetHtml + (extraHtml ? `<span style="width:100%;height:0"></span>${extraHtml}` : '');
+}
+
+function toggleDtChip(type) {
+  if (_dtSelected.has(type)) {
+    _dtSelected.delete(type);
+  } else {
+    _dtSelected.add(type);
+  }
+  renderDtChips();
+}
+
+async function saveImpact() {
+  if (!_detailBreach) return;
+
+  const recordsRaw = document.getElementById('impact-records-input')?.value;
+  const customRaw  = document.getElementById('impact-dt-custom')?.value || '';
+
+  // Merge custom types into selection set
+  customRaw.split(',').map(t => t.trim()).filter(Boolean).forEach(t => _dtSelected.add(t));
+
+  const payload = {
+    records_affected: recordsRaw ? parseInt(recordsRaw, 10) : null,
+    data_types:       _dtSelected.size ? [..._dtSelected].join(', ') : null,
+  };
+
+  try {
+    await api('PUT', `/api/breaches/${_detailBreach.id}`, payload);
+    showToast('Impact data saved', 'success');
+    // Refresh the detail view with updated data
+    closeImpactEdit();
+    await openDetail(_detailBreach.id);
+    loadDashboard();
+    loadBreaches();
+  } catch (e) {
+    showToast('Save failed: ' + e.message, 'error');
+  }
 }
 
 function renderDataTypePills(dataTypes) {
@@ -666,16 +780,10 @@ function renderDataTypeHeatmap(breaches) {
 }
 
 /* ── Sources ─────────────────────────────────────────────────────────────────── */
+// Only attorney general breach notification portals are active sources.
 const SOURCE_META = {
-  'HHS OCR':          { desc: 'HIPAA breach portal. Financial institutions with health plan data. 500+ individual threshold.', color: '#8957e5', url: 'https://ocrportal.hhs.gov/ocr/breach/breach_report.jsf' },
-  'Maine AG':         { desc: 'Maine AG breach notification registry. Broad filing requirements covering many industries.', color: '#58a6ff', url: 'https://www.maine.gov/agviewer/content/ag/985235c7-cb9c-4b06-a025-7a4a77e9d52f/list.html' },
-  'California AG':    { desc: 'California AG data breach list. CA requires notification for 500+ CA residents.', color: '#d29922', url: 'https://oag.ca.gov/privacy/databreach/list' },
-  'DataBreaches.net': { desc: 'Crowdsourced breach news. Rich coverage of financial sector incidents.', color: '#ff7b72', url: 'https://www.databreaches.net' },
-  'BankInfoSecurity': { desc: 'ISMG financial-sector news. Covers credit union and bank cyber incidents.', color: '#3fb950', url: 'https://www.bankinfosecurity.com' },
-  'KrebsOnSecurity':  { desc: 'Brian Krebs investigative reporting. Deep-dive breach investigations.', color: '#f0883e', url: 'https://krebsonsecurity.com' },
-  'Dark Reading':     { desc: 'Cybersecurity news outlet. Broad coverage of breach disclosures.', color: '#bc8cff', url: 'https://www.darkreading.com' },
-  'NCUA':             { desc: 'National Credit Union Administration. Regulatory actions and supervisory letters.', color: '#79c0ff', url: 'https://www.ncua.gov' },
-  'ITRC':             { desc: 'Identity Theft Resource Center. Comprehensive breach database.', color: '#e3b341', url: 'https://www.idtheftcenter.org' },
+  'Maine AG':      { desc: 'Maine AG breach notification registry. Broad filing requirements covering many industries including financial institutions.', color: '#58a6ff', url: 'https://www.maine.gov/agviewer/content/ag/985235c7-cb9c-4b06-a025-7a4a77e9d52f/list.html' },
+  'California AG': { desc: 'California AG data breach list. CA law requires notification for breaches affecting 500+ California residents.', color: '#d29922', url: 'https://oag.ca.gov/privacy/databreach/list' },
 };
 
 async function loadSources() {
@@ -819,13 +927,9 @@ function breachTypeBadge(type) {
 function sourceBadge(source) {
   if (!source) return '';
   const cls = {
-    'DataBreaches.net': 'databreaches',
-    'Maine AG': 'maine',
+    'Maine AG':      'maine',
     'California AG': 'california',
-    'HHS OCR': 'hhs',
-    'NCUA': 'ncua',
-    'ITRC': 'itrc',
-    'Manual Entry': 'manual',
+    'Manual Entry':  'manual',
   };
   const key = cls[source] || 'manual';
   return `<span class="badge badge-source-${key}">${esc(source)}</span>`;
