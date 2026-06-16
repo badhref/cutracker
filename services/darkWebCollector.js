@@ -122,12 +122,30 @@ function getTorAgent() {
   }
 }
 
+// Track sources that have already emitted a one-time auth warning so we don't
+// spam the logs every 30 minutes when an API key is absent.
+const _authWarned = new Set();
+
+function _logHttpErr(method, url, err) {
+  const status = err.response?.status;
+  if (status === 401 || status === 403) {
+    if (!_authWarned.has(url)) {
+      console.warn(`[DarkWeb] ${method} ${url} — ${status} auth required. ` +
+        `Set URLHAUS_API_KEY or MALWAREBAZAAR_API_KEY env var to enable this source.`);
+      _authWarned.add(url);
+    }
+    // else: silently swallow — warning already emitted
+  } else {
+    console.warn(`[DarkWeb] ${method} ${url} — ${err.message}`);
+  }
+}
+
 async function get(url, opts = {}) {
   try {
     const resp = await httpClient(opts).get(url);
     return resp.data;
   } catch (err) {
-    console.warn(`[DarkWeb] GET ${url} — ${err.message}`);
+    _logHttpErr('GET', url, err);
     return null;
   }
 }
@@ -137,7 +155,7 @@ async function post(url, body, opts = {}) {
     const resp = await httpClient(opts).post(url, body);
     return resp.data;
   } catch (err) {
-    console.warn(`[DarkWeb] POST ${url} — ${err.message}`);
+    _logHttpErr('POST', url, err);
     return null;
   }
 }
@@ -175,11 +193,15 @@ async function collectRansomwareLive() {
 }
 
 // ── Collector: URLhaus (abuse.ch) ─────────────────────────────────────────────
+// Free API key available at https://urlhaus.abuse.ch/api/ — set URLHAUS_API_KEY
 async function collectURLhaus() {
+  const key = process.env.URLHAUS_API_KEY;
+  const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+  if (key) headers['Auth-Key'] = key;
   const data = await post(
     'https://urlhaus-api.abuse.ch/v1/urls/recent/',
     new URLSearchParams({ limit: '50' }),
-    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    { headers }
   );
   const urls = data?.urls || [];
 
@@ -204,11 +226,15 @@ async function collectURLhaus() {
 }
 
 // ── Collector: MalwareBazaar (abuse.ch) ───────────────────────────────────────
+// Free API key available at https://bazaar.abuse.ch/api/ — set MALWAREBAZAAR_API_KEY
 async function collectMalwareBazaar() {
+  const key = process.env.MALWAREBAZAAR_API_KEY;
+  const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+  if (key) headers['Auth-Key'] = key;
   const data = await post(
     'https://mb-api.abuse.ch/api/v1/',
     new URLSearchParams({ query: 'get_recent', selector: 'time' }),
-    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    { headers }
   );
   const samples = data?.data || [];
 
