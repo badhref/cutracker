@@ -55,6 +55,7 @@ function setupNav() {
       if (view === 'fetch-log') loadFetchLog();
       if (view === 'settings')  loadSettingsPage();
       if (view === 'sites' && window.sitesDashboard) window.sitesDashboard.load();
+      if (view === 'darkweb' && window.darkwebDashboard) window.darkwebDashboard.load();
     });
   });
 }

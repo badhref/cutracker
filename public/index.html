@@ -101,6 +101,14 @@
         Suspected Sites
         <span class="nav-badge" id="nav-sites-count">—</span>
       </button>
+      <button class="nav-item" data-view="darkweb">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 2a14.5 14.5 0 000 20M12 2a14.5 14.5 0 010 20M2 12h20"/>
+          <path d="M4.22 4.22a14.45 14.45 0 0015.56 0M4.22 19.78a14.45 14.45 0 0115.56 0"/>
+        </svg>
+        Dark Web Monitor
+      </button>
     </div>
   </nav>
 
@@ -356,6 +364,11 @@
       <!-- Populated by sites.js -->
     </div>
 
+    <!-- DARK WEB MONITOR ──────────────────────────────────────── -->
+    <div class="view" id="view-darkweb">
+      <!-- Populated by darkweb.js -->
+    </div>
+
   </main>
 </div>
 
@@ -499,6 +512,7 @@
 <div id="toast-container"></div>
 
 <script src="/js/sites.js"></script>
+<script src="/js/darkweb.js"></script>
 <script src="/js/app.js"></script>
 </body>
 </html>

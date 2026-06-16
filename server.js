@@ -6,6 +6,11 @@ const fs      = require('fs');
 const {
   getBreaches, getBreach, upsertBreach, deleteBreach, getStats, getFetchLog,
   getSetting, setSetting, getSettings,
+  initDwSchema,
+  getDwSources, updateDwSourceEnabled,
+  getDwFindings, getDwFinding, getDwStats,
+  searchDwIOCs,
+  getDwAlerts, insertDwAlert, updateDwAlert, deleteDwAlert,
   initSitesSchema, upsertSite, getSites, getSite, deleteSite,
   updateSiteScore, updateSiteStatus, updateSiteAnalysis,
   addSiteEvidence, getSiteEvidence, addAiAnalysis, getAiAnalysis,
@@ -13,6 +18,7 @@ const {
   getClusters, getCluster, upsertCluster, addSiteToCluster, getSiteStats,
 } = require('./db');
 const { runAllFetchers, runFetcherByName, getFetcherNames, seedDemoData } = require('./fetchers/index');
+const { runCollection, runSingleCollector, COLLECTORS } = require('./services/darkWebCollector');
 const { investigateSite } = require('./services/siteInvestigator');
 const { scoreSite } = require('./services/siteScoring');
 const { validateWithNcua, getAllowlistStats, reloadAllowlists } = require('./services/ncuaValidation');
@@ -648,11 +654,125 @@ app.post('/api/clusters/:id/add-site', (req, res) => {
   }
 });
 
+// ── Dark Web Monitoring Routes ────────────────────────────────────────────────
+
+// GET /api/darkweb/stats
+app.get('/api/darkweb/stats', (req, res) => {
+  try { res.json({ success: true, data: getDwStats() }); }
+  catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// GET /api/darkweb/findings
+app.get('/api/darkweb/findings', (req, res) => {
+  try {
+    const findings = getDwFindings(req.query);
+    res.json({ success: true, data: findings, count: findings.length });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// GET /api/darkweb/findings/:id
+app.get('/api/darkweb/findings/:id', (req, res) => {
+  try {
+    const f = getDwFinding(parseInt(req.params.id));
+    if (!f) return res.status(404).json({ success: false, error: 'Not found' });
+    res.json({ success: true, data: f });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// GET /api/darkweb/sources
+app.get('/api/darkweb/sources', (req, res) => {
+  try { res.json({ success: true, data: getDwSources() }); }
+  catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// POST /api/darkweb/sources/:id/toggle — enable/disable a source
+app.post('/api/darkweb/sources/:id/toggle', (req, res) => {
+  try {
+    const { enabled } = req.body;
+    updateDwSourceEnabled(parseInt(req.params.id), enabled);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// POST /api/darkweb/sources/:name/fetch — trigger a single collector
+app.post('/api/darkweb/sources/:name/fetch', async (req, res) => {
+  try {
+    const result = await runSingleCollector(decodeURIComponent(req.params.name));
+    res.json({ success: true, data: result });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// POST /api/darkweb/collect — trigger full collection cycle
+app.post('/api/darkweb/collect', async (req, res) => {
+  try {
+    const result = await runCollection();
+    res.json({ success: true, data: result });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// GET /api/darkweb/iocs
+app.get('/api/darkweb/iocs', (req, res) => {
+  try {
+    const iocs = searchDwIOCs(req.query);
+    res.json({ success: true, data: iocs, count: iocs.length });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// GET /api/darkweb/search — unified IOC + finding search
+app.get('/api/darkweb/search', (req, res) => {
+  try {
+    const { q, type } = req.query;
+    if (!q) return res.json({ success: true, data: { iocs: [], findings: [] } });
+    const iocs     = searchDwIOCs({ query: q, ioc_type: type });
+    const findings = getDwFindings({ search: q, limit: 50 });
+    res.json({ success: true, data: { iocs, findings } });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// GET /api/darkweb/alerts
+app.get('/api/darkweb/alerts', (req, res) => {
+  try { res.json({ success: true, data: getDwAlerts() }); }
+  catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// POST /api/darkweb/alerts
+app.post('/api/darkweb/alerts', (req, res) => {
+  try {
+    const { keyword, risk_threshold } = req.body;
+    if (!keyword?.trim()) return res.status(400).json({ success: false, error: 'keyword required' });
+    insertDwAlert(keyword.trim(), risk_threshold || 8);
+    res.status(201).json({ success: true, data: getDwAlerts() });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// PUT /api/darkweb/alerts/:id — toggle enabled
+app.put('/api/darkweb/alerts/:id', (req, res) => {
+  try {
+    const { enabled } = req.body;
+    updateDwAlert(parseInt(req.params.id), enabled);
+    res.json({ success: true, data: getDwAlerts() });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+// DELETE /api/darkweb/alerts/:id
+app.delete('/api/darkweb/alerts/:id', (req, res) => {
+  try {
+    deleteDwAlert(parseInt(req.params.id));
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
 // ── Scheduled Fetching (every 6 hours) ────────────────────────────────────────
 
 cron.schedule('0 */6 * * *', () => {
   console.log('[Cron] Running scheduled fetch...');
   runAllFetchers().catch(err => console.error('[Cron] Error:', err.message));
+});
+
+// Dark web collection — every 30 minutes
+cron.schedule('*/30 * * * *', () => {
+  console.log('[DarkWeb Cron] Running collection...');
+  runCollection().catch(err => console.error('[DarkWeb Cron] Error:', err.message));
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────────
@@ -664,5 +784,10 @@ app.listen(PORT, async () => {
   console.log(`  Seeding demo data...`);
   await seedDemoData();
   initSitesSchema();
-  console.log(`  Ready. Auto-fetch runs every 6 hours.\n`);
+  initDwSchema();
+  console.log(`  Ready. Breach fetch every 6h. Dark web collection every 30m.\n`);
+  // Kick off an initial dark web collection without blocking startup
+  setImmediate(() => {
+    runCollection().catch(err => console.error('[DarkWeb] Initial collection error:', err.message));
+  });
 });

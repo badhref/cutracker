@@ -592,6 +592,285 @@ function getSettings() {
   return out;
 }
 
+// ── Dark Web Schema ────────────────────────────────────────────────────────────
+
+function initDwSchema() {
+  const db = getDb();
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS dw_sources (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      name             TEXT NOT NULL UNIQUE,
+      url              TEXT NOT NULL,
+      category         TEXT NOT NULL,
+      enabled          INTEGER DEFAULT 1,
+      tor_required     INTEGER DEFAULT 0,
+      last_checked     TEXT,
+      last_success     TEXT,
+      reliability_score REAL DEFAULT 5.0,
+      notes            TEXT,
+      created_at       TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS dw_findings (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      external_id      TEXT UNIQUE,
+      source_name      TEXT NOT NULL,
+      title            TEXT,
+      snippet          TEXT,
+      raw_content      TEXT,
+      url              TEXT,
+      risk_score       INTEGER DEFAULT 0,
+      severity         TEXT DEFAULT 'LOW',
+      category         TEXT DEFAULT 'other',
+      keyword_hits     TEXT,
+      discovered_date  TEXT,
+      created_at       TEXT DEFAULT (datetime('now')),
+      updated_at       TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS dw_iocs (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      finding_id   INTEGER REFERENCES dw_findings(id) ON DELETE CASCADE,
+      ioc_type     TEXT NOT NULL,
+      ioc_value    TEXT NOT NULL,
+      source_name  TEXT,
+      first_seen   TEXT DEFAULT (datetime('now')),
+      last_seen    TEXT DEFAULT (datetime('now')),
+      UNIQUE(ioc_type, ioc_value)
+    );
+
+    CREATE TABLE IF NOT EXISTS dw_alerts (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      keyword         TEXT NOT NULL UNIQUE,
+      enabled         INTEGER DEFAULT 1,
+      risk_threshold  INTEGER DEFAULT 8,
+      created_at      TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_dw_findings_ts       ON dw_findings(created_at);
+    CREATE INDEX IF NOT EXISTS idx_dw_findings_score    ON dw_findings(risk_score);
+    CREATE INDEX IF NOT EXISTS idx_dw_findings_category ON dw_findings(category);
+    CREATE INDEX IF NOT EXISTS idx_dw_findings_severity ON dw_findings(severity);
+    CREATE INDEX IF NOT EXISTS idx_dw_iocs_type_val     ON dw_iocs(ioc_type, ioc_value);
+    CREATE INDEX IF NOT EXISTS idx_dw_iocs_finding      ON dw_iocs(finding_id);
+  `);
+
+  // Seed source catalog (INSERT OR IGNORE so re-runs are safe)
+  const sources = [
+    // ── Ransomware leak site aggregators (clearnet) ──
+    { name: 'ransomware.live',        url: 'https://api.ransomware.live/recentvictims', category: 'ransomware',   tor_required: 0, notes: 'Public JSON API aggregating ransomware leak site victims' },
+    // ── Ransomware leak sites (Tor) ──
+    { name: 'Akira',                  url: 'http://akiral2iz6a7qgd3ayp3l6yub7xx7ob7dc6mhsataclfqlnhsmt7alid.onion', category: 'ransomware', tor_required: 1, notes: 'Akira ransomware group leak site' },
+    { name: 'Play',                   url: 'http://mbrlkbtq5jonaqkurdeqgi7t7sto223agtfdxsslspa4oioe7grmada.onion', category: 'ransomware', tor_required: 1, notes: 'Play ransomware group leak site' },
+    { name: 'Qilin',                  url: 'http://ijzn3sicrcy3zbrmgqhgr4kbzfhnjpf7l7z5gwww2zicbmwtqptqkbyd.onion', category: 'ransomware', tor_required: 1, notes: 'Qilin ransomware group leak site' },
+    { name: 'SafePay',                url: 'http://nz4z6ruzcekriti5cjjiiylzvrmysyqwibxztjngmulf4zzbyaolvqad.onion', category: 'ransomware', tor_required: 1, notes: 'SafePay ransomware group leak site' },
+    { name: 'Hunters International', url: 'http://hunters55rdxciehoqzwv7vgyv6nt37tbwax2reroyzxhou7my5ejyid.onion', category: 'ransomware', tor_required: 1, notes: 'Hunters International leak site' },
+    { name: 'INC Ransom',             url: 'http://incransom.d34dlnk3llq5hirnre7gywxrq3f3bq4tymxpq7wr4cydscnqy7ixdad.onion', category: 'ransomware', tor_required: 1, notes: 'INC Ransom group leak site' },
+    // ── Discovery / search ──
+    { name: 'Ahmia',                  url: 'https://ahmia.fi/search/',              category: 'discovery',    tor_required: 0, notes: 'Clearnet Tor search engine' },
+    { name: 'Dark.fail',              url: 'https://dark.fail',                      category: 'discovery',    tor_required: 0, notes: 'Dark web link directory' },
+    // ── Paste monitoring ──
+    { name: 'Pastebin',               url: 'https://pastebin.com/archive',           category: 'leaks',        tor_required: 0, notes: 'Public paste monitoring' },
+    // ── Threat intelligence feeds ──
+    { name: 'URLhaus',                url: 'https://urlhaus-api.abuse.ch/v1/',       category: 'enrichment',   tor_required: 0, notes: 'Malware URL feed (abuse.ch)' },
+    { name: 'MalwareBazaar',          url: 'https://mb-api.abuse.ch/api/v1/',        category: 'enrichment',   tor_required: 0, notes: 'Malware sample feed (abuse.ch)' },
+    { name: 'AlienVault OTX',         url: 'https://otx.alienvault.com/api/v1/',     category: 'enrichment',   tor_required: 0, notes: 'Requires OTX_API_KEY env var', enabled: 0 },
+    { name: 'AbuseIPDB',              url: 'https://api.abuseipdb.com/api/v2/',      category: 'enrichment',   tor_required: 0, notes: 'Requires ABUSEIPDB_API_KEY env var', enabled: 0 },
+  ];
+
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO dw_sources (name, url, category, enabled, tor_required, notes)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  for (const s of sources) {
+    stmt.run(s.name, s.url, s.category, s.enabled ?? 1, s.tor_required, s.notes ?? null);
+  }
+
+  // Seed default alert keywords
+  const defaultAlerts = [
+    'bank', 'credit union', 'fintech', 'payment processor',
+    'ACH', 'wire transfer', 'SWIFT',
+  ];
+  const alertStmt = db.prepare('INSERT OR IGNORE INTO dw_alerts (keyword) VALUES (?)');
+  for (const kw of defaultAlerts) alertStmt.run(kw);
+}
+
+// ── Dark Web: Sources ──────────────────────────────────────────────────────────
+
+function getDwSources() {
+  return getDb().prepare('SELECT * FROM dw_sources ORDER BY category, name').all();
+}
+
+function getDwSourceByName(name) {
+  return getDb().prepare('SELECT * FROM dw_sources WHERE name = ?').get(name);
+}
+
+function updateDwSourceChecked(id) {
+  getDb().prepare(`
+    UPDATE dw_sources SET last_checked = datetime('now'), last_success = datetime('now') WHERE id = ?
+  `).run(id);
+}
+
+function updateDwSourceEnabled(id, enabled) {
+  getDb().prepare('UPDATE dw_sources SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+}
+
+// ── Dark Web: Findings ─────────────────────────────────────────────────────────
+
+function insertDwFinding(f) {
+  const result = getDb().prepare(`
+    INSERT INTO dw_findings
+      (external_id, source_name, title, snippet, raw_content, url,
+       risk_score, severity, category, keyword_hits, discovered_date)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    f.external_id ?? null, f.source_name, f.title ?? null, f.snippet ?? null,
+    f.raw_content ?? null, f.url ?? null, f.risk_score ?? 0,
+    f.severity ?? 'LOW', f.category ?? 'other',
+    f.keyword_hits ?? null, f.discovered_date ?? null
+  );
+  return result.lastInsertRowid;
+}
+
+function getDwFindingByExternalId(externalId) {
+  return getDb().prepare('SELECT id, risk_score, severity FROM dw_findings WHERE external_id = ?').get(externalId);
+}
+
+function updateDwFinding(id, fields) {
+  getDb().prepare(`
+    UPDATE dw_findings SET risk_score = ?, severity = ?, updated_at = datetime('now') WHERE id = ?
+  `).run(fields.risk_score, fields.severity, id);
+}
+
+function getDwFindings(filters = {}) {
+  const db = getDb();
+  let sql = 'SELECT * FROM dw_findings WHERE 1=1';
+  const params = [];
+
+  if (filters.search) {
+    sql += ' AND (title LIKE ? OR snippet LIKE ? OR source_name LIKE ?)';
+    const s = `%${filters.search}%`;
+    params.push(s, s, s);
+  }
+  if (filters.category)   { sql += ' AND category = ?';  params.push(filters.category); }
+  if (filters.severity)   { sql += ' AND severity = ?';  params.push(filters.severity); }
+  if (filters.source)     { sql += ' AND source_name = ?'; params.push(filters.source); }
+  if (filters.min_score)  { sql += ' AND risk_score >= ?'; params.push(parseInt(filters.min_score)); }
+  if (filters.since)      { sql += ' AND created_at >= ?'; params.push(filters.since); }
+
+  sql += ' ORDER BY risk_score DESC, created_at DESC';
+
+  if (filters.limit)  { sql += ' LIMIT ?';  params.push(parseInt(filters.limit)); }
+  if (filters.offset) { sql += ' OFFSET ?'; params.push(parseInt(filters.offset)); }
+
+  return db.prepare(sql).all(...params);
+}
+
+function getDwFinding(id) {
+  return getDb().prepare('SELECT * FROM dw_findings WHERE id = ?').get(id);
+}
+
+function getDwStats() {
+  const db = getDb();
+  const now = new Date();
+  const since24h = new Date(now - 86_400_000).toISOString();
+  const since7d  = new Date(now - 7 * 86_400_000).toISOString();
+
+  const total        = db.prepare('SELECT COUNT(*) as n FROM dw_findings').get().n;
+  const last24h      = db.prepare('SELECT COUNT(*) as n FROM dw_findings WHERE created_at >= ?').get(since24h).n;
+  const highRisk     = db.prepare("SELECT COUNT(*) as n FROM dw_findings WHERE severity IN ('HIGH','CRITICAL')").get().n;
+  const ransomware   = db.prepare("SELECT COUNT(*) as n FROM dw_findings WHERE category = 'ransomware'").get().n;
+  const credentials  = db.prepare("SELECT COUNT(*) as n FROM dw_findings WHERE category IN ('credentials','stealer_logs')").get().n;
+  const initAccess   = db.prepare("SELECT COUNT(*) as n FROM dw_findings WHERE category = 'initial_access'").get().n;
+  const totalIOCs    = db.prepare('SELECT COUNT(*) as n FROM dw_iocs').get().n;
+
+  const byCategory   = db.prepare(
+    'SELECT category, COUNT(*) as count FROM dw_findings GROUP BY category ORDER BY count DESC'
+  ).all();
+  const bySeverity   = db.prepare(
+    "SELECT severity, COUNT(*) as count FROM dw_findings GROUP BY severity ORDER BY CASE severity WHEN 'CRITICAL' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END"
+  ).all();
+  const bySource     = db.prepare(
+    'SELECT source_name, COUNT(*) as count FROM dw_findings GROUP BY source_name ORDER BY count DESC'
+  ).all();
+  const recent       = db.prepare(
+    'SELECT id, title, snippet, category, severity, risk_score, source_name, created_at FROM dw_findings ORDER BY created_at DESC LIMIT 10'
+  ).all();
+
+  // Top keywords across recent findings (last 7 days)
+  const kwRows = db.prepare(
+    'SELECT keyword_hits FROM dw_findings WHERE keyword_hits IS NOT NULL AND created_at >= ?'
+  ).all(since7d);
+  const kwCounts = {};
+  for (const row of kwRows) {
+    try {
+      const kws = JSON.parse(row.keyword_hits) || [];
+      for (const kw of kws) kwCounts[kw] = (kwCounts[kw] || 0) + 1;
+    } catch { /* ignore */ }
+  }
+  const topKeywords = Object.entries(kwCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([keyword, count]) => ({ keyword, count }));
+
+  return {
+    total, last24h, highRisk, ransomware, credentials, initAccess, totalIOCs,
+    byCategory, bySeverity, bySource, recent, topKeywords,
+  };
+}
+
+// ── Dark Web: IOCs ─────────────────────────────────────────────────────────────
+
+function insertDwIOC(ioc) {
+  try {
+    getDb().prepare(`
+      INSERT INTO dw_iocs (finding_id, ioc_type, ioc_value, source_name)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(ioc_type, ioc_value) DO UPDATE SET
+        last_seen = datetime('now'),
+        finding_id = COALESCE(finding_id, excluded.finding_id)
+    `).run(ioc.finding_id ?? null, ioc.ioc_type, ioc.ioc_value, ioc.source_name ?? null);
+  } catch { /* ignore */ }
+}
+
+function searchDwIOCs(filters = {}) {
+  const db = getDb();
+  let sql = `
+    SELECT i.*, f.title, f.risk_score, f.severity, f.category, f.created_at as finding_date
+    FROM dw_iocs i
+    LEFT JOIN dw_findings f ON f.id = i.finding_id
+    WHERE 1=1
+  `;
+  const params = [];
+
+  if (filters.query)    { sql += ' AND i.ioc_value LIKE ?';  params.push(`%${filters.query}%`); }
+  if (filters.ioc_type) { sql += ' AND i.ioc_type = ?';      params.push(filters.ioc_type); }
+
+  sql += ' ORDER BY i.last_seen DESC LIMIT 200';
+  return db.prepare(sql).all(...params);
+}
+
+// ── Dark Web: Alerts ───────────────────────────────────────────────────────────
+
+function getDwAlerts() {
+  return getDb().prepare('SELECT * FROM dw_alerts ORDER BY created_at ASC').all();
+}
+
+function insertDwAlert(keyword, threshold = 8) {
+  return getDb().prepare(
+    'INSERT OR IGNORE INTO dw_alerts (keyword, risk_threshold) VALUES (?, ?)'
+  ).run(keyword.trim(), threshold);
+}
+
+function updateDwAlert(id, enabled) {
+  return getDb().prepare('UPDATE dw_alerts SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+}
+
+function deleteDwAlert(id) {
+  return getDb().prepare('DELETE FROM dw_alerts WHERE id = ?').run(id);
+}
+
 module.exports = {
   getDb, upsertBreach, getBreaches, getBreach, deleteBreach, getStats, logFetch, getFetchLog,
   getSetting, setSetting, getSettings,
@@ -600,4 +879,10 @@ module.exports = {
   addSiteEvidence, getSiteEvidence, addAiAnalysis, getAiAnalysis,
   addRelatedSite, getRelatedSites, auditLog, getSiteAuditLog,
   getClusters, getCluster, upsertCluster, addSiteToCluster, getSiteStats,
+  // Dark web
+  initDwSchema,
+  getDwSources, getDwSourceByName, updateDwSourceChecked, updateDwSourceEnabled,
+  insertDwFinding, getDwFindingByExternalId, updateDwFinding, getDwFindings, getDwFinding, getDwStats,
+  insertDwIOC, searchDwIOCs,
+  getDwAlerts, insertDwAlert, updateDwAlert, deleteDwAlert,
 };
